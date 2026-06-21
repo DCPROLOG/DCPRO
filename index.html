@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚚 Dimensionador de Carga Pro </title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://unpkg.com/xlsx-style@0.8.13/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        body { font-family: Arial, sans-serif; margin: 15px; background-color: #f4f6f9; color: #333; font-size: 14px; }
+        h1, h2 { color: #1e3a8a; margin-bottom: 5px; }
+        .container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .table-responsive { overflow-x: auto; margin-top: 15px; }
+        table { width: 100%; border-collapse: collapse; min-width: 600px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #1e3a8a; color: white; font-size: 12px; }
+        input, select { padding: 6px; text-align: center; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input[type="number"] { width: 65px; }
+        input[type="text"] { width: 110px; text-align: left; }
+        select { width: 100%; text-align: left; font-weight: bold; color: #1e3a8a; }
+        
+        .secao-veiculo { margin: 15px 0; padding: 12px; background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; }
+        .btn-add { background-color: #3b82f6; margin-bottom: 10px; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn-add:hover { background-color: #2563eb; }
+        .btn-clear { background-color: #6b7280; margin-left: 8px; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn-clear:hover { background-color: #4b5563; }
+        .btn-danger { background-color: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+        .btn-danger:hover { background-color: #dc2626; }
+        
+        .btn-calc { background-color: #10b981; color: white; border: none; width: 100%; padding: 12px; font-size: 16px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        .btn-calc:hover { background-color: #059669; }
+        
+        .btn-pdf { background-color: #8b5cf6; color: white; border: none; width: 100%; padding: 12px; font-size: 16px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; display: none; }
+        .btn-pdf:hover { background-color: #7c3aed; }
+        .btn-excel { background-color: #2e7d32; color: white; border: none; width: 100%; padding: 12px; font-size: 16px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 10px; display: none; }
+        .btn-excel:hover { background-color: #1b5e20; }
+        
+        .resultados { margin-top: 20px; padding: 15px; background-color: #eff6ff; border-left: 5px solid #3b82f6; border-radius: 4px; }
+        .alerta-veiculo { margin-top: 10px; padding: 12px; background-color: #fee2e2; border-left: 5px solid #ef4444; color: #991b1b; border-radius: 4px; font-weight: bold; display: none; line-height: 1.5; }
+        .sugestao-veiculo { margin-top: 10px; padding: 12px; background-color: #e0f2fe; border-left: 5px solid #0284c7; color: #0369a1; border-radius: 4px; font-weight: bold; display: none; line-height: 1.5; }
+        
+        .metric-container { margin-bottom: 12px; margin-top: 10px; }
+        .bar-bg { background-color: #e5e7eb; border-radius: 10px; height: 24px; width: 100%; overflow: hidden; margin-top: 5px; }
+        .bar-fill { height: 100%; width: 0%; transition: width 0.3s ease-in-out; text-align: right; padding-right: 10px; color: white; font-size: 12px; font-weight: bold; line-height: 24px; }
+        .fill-peso { background-color: #f59e0b; }
+        
+        .label-linha { font-size: 12px; font-weight: bold; display: inline-block; padding: 2px 6px; border-radius: 3px; color: white; }
+
+        .mapa-box { margin-top: 20px; padding: 15px; background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; }
+        .canvas-container { width: 100%; background: #ffffff; padding: 15px; border-radius: 6px; box-sizing: border-box; margin-bottom: 15px; border: 1px solid #cbd5e1; overflow-x: auto; }
+        .mapa-titulo { font-size: 13px; font-weight: bold; color: #1e3a8a; margin: 5px 0; }
+        
+        .dimensoes-bau-tag { display: inline-block; background-color: #1e3a8a; color: white; font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: bold; margin-bottom: 15px; }
+        .dimensoes-bau-tag.estourou { background-color: #ef4444; animation: piscar 1.5s infinite; }
+
+        .legenda { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+        .legenda-item { display: flex; align-items: center; font-size: 12px; font-weight: bold; }
+        .legenda-cor { width: 14px; height: 14px; margin-right: 5px; border-radius: 3px; border: 1px solid #444; }
+
+        .nota-formal { margin-top: 20px; padding: 12px 15px; background-color: #f8fafc; border: 1px dashed #94a3b8; border-radius: 6px; color: #475569; font-size: 12px; line-height: 1.6; text-align: justify; }
+        .nota-formal strong { color: #1e3a8a; }
+
+        .selo-compatibilidade { margin: 12px 0; padding: 14px; border-radius: 8px; text-align: center; font-size: 20px; font-weight: bold; display: none; }
+        .selo-cabe { background: #dcfce7; color: #166534; border: 2px solid #22c55e; }
+
+        @keyframes piscar {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+    
+        .fill-verde { background: #22c55e !important; }
+        .fill-amarelo { background: #facc15 !important; color: #111 !important; }
+        .fill-vermelho { background: #ef4444 !important; }
+        .fill-piscando { background: #ef4444 !important; animation: piscar 1s infinite; }
+        .rodape {
+        text-align: center;
+        padding: 20px;
+        margin-top: 30px;
+        font-size: 14px;
+        color: #666;
+        border-top: 1px solid #ddd;
+        background-color: #f9f9f9;
+    }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🚚 Dimensionador de Carga Pro</h1>
+    <p style="margin-top:0; color:#666;">Dimensionador de Carga Pro</p>
+
+    <div class="secao-veiculo">
+        <label style="font-weight: bold; color: #334155; display: block; margin-bottom: 5px;">🚚 Veículo Pretendido para Contratação / Disponível:</label>
+        <select id="select-veiculo" onchange="calcularCarga();">
+            <option value="0">Urbanos / Vans (Cap: 650 kg | C: 1.80m x L: 1.30m x A: 1.20m)</option>
+            <option value="1">VUC / 3/4 (Cap: 3.500 kg | C: 4.50m x L: 2.20m x A: 2.20m)</option>
+            <option value="2">Caminhão Toco (Cap: 6.000 kg | C: 6.50m x L: 2.40m x A: 2.50m)</option>
+            <option value="3" selected>Caminhão Truck (Cap: 14.000 kg | C: 8.50m x L: 2.40m x A Máx Carga: 2.60m)</option>
+            <option value="4">Carreta 3 Eixos (Cap: 25.000 kg | C: 13.50m x L: 2.45m x A Máx Rodagem ANTT: 3.00m)</option>
+        </select>
+    </div>
+
+    <button class="btn-add" onclick="adicionarLinha()">+ Adicionar Item</button>
+    <button class="btn-clear" onclick="limparTudo()">🗑 Limpar Tudo</button>
+
+    <div class="table-responsive">
+        <div id="avisoItensIncompletos" style="display:none;background:#fff3cd;border:1px solid #ffda6a;color:#664d03;padding:12px;margin:10px 0;border-radius:6px;font-weight:bold;">
+            ⚠️ Existem itens com informações incompletas. Preencha Comprimento, Largura, Altura e Peso antes de calcular.
+        </div>
+        <table id="tabela-carga">
+            <thead>
+                <tr>
+                    <th>Ref / Cor</th>
+                    <th>Identificação / Tipo</th>
+                    <th>Qtd</th>
+                    <th>Comprimento (m)</th>
+                    <th>Largura (m)</th>
+                    <th>Altura (m)</th>
+                    <th>Peso Unit. (kg)</th>
+                    <th>Ação</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+
+    <br>
+    <button class="btn-calc" onclick="calcularCarga()">Calcular</button>
+    <button class="btn-pdf" id="btn-gerar-pdf" onclick="gerarRelatorioPDF()">💾 Gerar Relatório PDF</button>
+    <button class="btn-excel" id="btn-excel" onclick="exportarExcel()">📊 Exportar para Excel</button>
+
+    <div class="alerta-veiculo" id="alerta-frota"></div>
+    <div class="sugestao-veiculo" id="sugestao-frota"></div>
+    <div id="selo-compatibilidade" class="selo-compatibilidade"></div>
+
+    <div class="resultados" id="bloco-resultados" style="display: none;">
+        <h2>Análise de Ocupação do Veículo Selecionado</h2>
+        <div class="metric-container">
+            <label><strong>Capacidade de Peso Ocupado:</strong> <span id="txt-peso">0</span> kg de <span id="max-peso">0</span> kg</label>
+            <div class="bar-bg"><div id="bar-peso" class="bar-fill fill-peso">0%</div></div>
+        </div>
+        <div class="metric-container" style="margin-top: 15px;">
+            <label><strong>Capacidade Cúbica Ocupada (Volume):</strong> <span id="txt-vol">0</span> m³ de <span id="max-vol">0</span> m³</label>
+            <div class="bar-bg"><div id="bar-vol" class="bar-fill">0%</div></div>
+        </div>
+    </div>
+
+    <div class="mapa-box" id="bloco-mapa" style="display: none;">
+        <h2>Disposição Física da Carga no Espaço de Rodagem</h2>
+        <div class="mapa-titulo">1. Arrumação Otimizada no Assoalho (Vista de Cima - Com Indicação Dinâmica de Medidas Internas)</div>
+        
+        <div id="dimesoes-bau-texto" class="dimensoes-bau-tag">Dimensões Internas Disponíveis: -</div>
+
+        <div class="canvas-container">
+            <svg id="svg-cima" width="750" height="220" style="background: #ffffff; display: block; margin: 0 auto; overflow: visible;"></svg>
+        </div>
+        <div class="legenda" id="mapa-legenda"></div>
+        <div id="resumo-excedente" style="display:none;margin-top:12px;padding:12px;background:#fee2e2;border-left:5px solid #dc2626;border-radius:4px;"></div>
+
+        <div class="nota-formal">
+            ℹ️ <strong>NOTA INFORMATIVA DE SEGURANÇA OPERACIONAL:</strong> O mapa de disposição física acima constitui uma <strong>projeção matemática sugestiva</strong>, desenvolvida para fins de checagem volumétrica e análise de compatibilidade espacial da carga em relação ao veículo selecionado. Esta interface não substitui a avaliação técnica e presencial do encarregado de pátio, do motorista ou do operador de estiva. A acomodação final deve observar rigorosamente as amarrações regulamentares, a integridade física das embalagens e as legislações vigentes de distribuição de peso por eixo físico nas rodovias.
+        </div>
+    </div>
+</div>
+
+<script>
+    const dbVeiculos = [
+        { nome: "Urbanos / Vans", pesoMax: 650, volMax: 4.5, compFisico: 1.80, largFisica: 1.30, altFisica: 1.20 },
+        { nome: "VUC / 3/4", pesoMax: 3500, volMax: 18, compFisico: 4.50, largFisica: 2.20, altFisica: 2.20 },
+        { nome: "Caminhão Toco", pesoMax: 6000, volMax: 32, compFisico: 6.50, largFisica: 2.40, altFisica: 2.50 },
+        { nome: "Caminhão Truck", pesoMax: 14000, volMax: 50, compFisico: 8.50, largFisica: 2.40, altFisica: 2.60 },
+        { nome: "Carreta 3 Eixos", pesoMax: 25000, volMax: 90, compFisico: 13.50, largFisica: 2.45, altFisica: 3.00 }
+    ];
+
+    const coresItens = [
+        "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316", 
+        "#14b8a6", "#ef4444", "#a855f7", "#6366f1", "#84cc16", "#059669", "#d946ef", 
+        "#b45309", "#0284c7", "#4d7c0f", "#be123c", "#6d28d9", "#1e40af"
+    ];
+    let globalEstorouMetragem = false;
+    let globalItensExcedentes = [];
+
+    function formatarBR(valor) {
+        return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function atualizarLabelsEcores() {
+        const lines = document.querySelectorAll("#tabela-carga tbody tr");
+        lines.forEach((linha, index) => {
+            const inlineLabel = linha.querySelector(".label-linha");
+            const cor = coresItens[index % coresItens.length];
+            if (inlineLabel) {
+                inlineLabel.innerText = `Item ${index + 1}`;
+                inlineLabel.style.backgroundColor = cor;
+            }
+        });
+    }
+
+    function adicionarLinha() {
+        const tabela = document.getElementById("tabela-carga").getElementsByTagName('tbody')[0];
+        const novaLinha = tabela.insertRow();
+       novaLinha.innerHTML = `
+    <td><span class="label-linha">Item</span></td>
+    <td><input type="text" placeholder="Ex: Caixa A" class="nome"></td>
+    <td><input type="number" class="qtd" value="1" min="1" onkeydown="bloquearLetras(event)"></td>
+    <td><input type="number" class="comp" placeholder="0.00" step="0.01" min="0" onkeydown="bloquearLetras(event)"></td>
+    <td><input type="number" class="larg" placeholder="0.00" step="0.01" min="0" onkeydown="bloquearLetras(event)"></td>
+    <td><input type="number" class="alt" placeholder="0.00" step="0.01" min="0" onkeydown="bloquearLetras(event)"></td>
+    <td><input type="text" class="peso" onkeydown="bloquearLetras(event)" placeholder="0"></td>
+    <td><button class="btn-danger" onclick="deletarLinha(this)">X</button></td>
+`;
+        atualizarLabelsEcores();
+    }
+
+    function deletarLinha(botao) {
+        botao.parentNode.parentNode.remove();
+        atualizarLabelsEcores();
+        calcularCarga();
+    }
+
+    function validarPeso(el){
+        let v = String(el.value || '');
+        v = v.replace(/[^0-9,.\-]/g,'');
+        if(v.includes('-')){
+            el.value = '0';
+            calcularCarga();
+            return;
+        }
+        let n = Number(v.replace(/\./g,'').replace(',','.'));
+        if(v.trim()==='' || isNaN(n) || n < 0){
+            el.value = '0';
+        } else {
+            el.value = n.toString();
+        }
+    }
+
+    function corrigirNegativo(el){
+        let valor = parseFloat(String(el.value).replace(',', '.'));
+        if (!isNaN(valor) && valor < 0){
+            el.value = 0;
+        }
+    }
+
+    function verificarItensIncompletos(){
+        let incompleto = false;
+        document.querySelectorAll('#tabela-carga tbody tr').forEach(function(tr){
+            const nomeEl = tr.querySelector('.nome');
+            const compEl = tr.querySelector('.comp');
+            const largEl = tr.querySelector('.larg');
+            const altEl = tr.querySelector('.alt');
+            const pesoEl = tr.querySelector('.peso');
+
+            if(!compEl || !largEl || !altEl || !pesoEl) return;
+
+            const nomeVal = (nomeEl ? nomeEl.value : "").trim();
+            const compVal = parseFloat(compEl.value) || 0;
+            const largVal = parseFloat(largEl.value) || 0;
+            const altVal = parseFloat(altEl.value) || 0;
+            
+            let pesoText = (pesoEl.value || '').trim();
+            const pesoVal = Number(pesoText.replace(/\./g, '').replace(',', '.')) || 0;
+
+            if (nomeVal === "" && compVal === 0 && largVal === 0 && altVal === 0 && pesoVal === 0) {
+                return;
+            }
+
+            if (compVal === 0 || largVal === 0 || altVal === 0 || pesoVal === 0) {
+                incompleto = true;
+            }
+        });
+
+        const aviso = document.getElementById('avisoItensIncompletos');
+        if(aviso) aviso.style.display = incompleto ? "block" : "none";
+        return incompleto;
+    }
+
+    function calcularCarga(){
+        const lines = document.querySelectorAll("#tabela-carga tbody tr");
+        
+        if(lines.length === 0) {
+            document.getElementById("bloco-resultados").style.display = "none";
+            document.getElementById("bloco-mapa").style.display = "none";
+            document.getElementById("alerta-frota").style.display = "none";
+            document.getElementById("sugestao-frota").style.display = "none";
+            document.getElementById("selo-compatibilidade").style.display = "none";
+            document.getElementById("btn-gerar-pdf").style.display = "none";
+            document.getElementById("btn-excel").style.display = "none";
+            
+            const aviso = document.getElementById('avisoItensIncompletos');
+            if(aviso) aviso.style.display = "none";
+            return; 
+        }
+
+        const possuiIncompletos = verificarItensIncompletos();
+        if (possuiIncompletos) {
+            document.getElementById("bloco-resultados").style.display = "none";
+            document.getElementById("bloco-mapa").style.display = "none";
+            document.getElementById("alerta-frota").style.display = "none";
+            document.getElementById("sugestao-frota").style.display = "none";
+            document.getElementById("selo-compatibilidade").style.display = "none";
+            document.getElementById("btn-gerar-pdf").style.display = "none";
+            document.getElementById("btn-excel").style.display = "none";
+            return;
+        }
+
+        let volTotal = 0, pesoTotal = 0;
+        let itemEstouraDimensao = false;
+        let listaCarga = [];
+        let maiorCompItem = 0, maiorLargItem = 0, maiorAltItem = 0;
+
+        const indexSel = parseInt(document.getElementById("select-veiculo").value);
+        const vSelecionado = dbVeiculos[indexSel];
+        const volMaxVeiculoCalculado = vSelecionado.compFisico * vSelecionado.largFisica * vSelecionado.altFisica;
+
+        lines.forEach((linha, index) => {
+            const nome = linha.querySelector(".nome").value || `Item ${index + 1}`;
+            const qtd = parseInt(linha.querySelector(".qtd").value) || 0;
+            const comp = Math.max(parseFloat(linha.querySelector(".comp").value) || 0, 0);
+            const larg = Math.max(parseFloat(linha.querySelector(".larg").value) || 0, 0);
+            const alt = Math.max(parseFloat(linha.querySelector(".alt").value) || 0, 0);
+            
+            let pesoInput = linha.querySelector(".peso").value.trim();
+            const peso = Math.max(Number(pesoInput.replace(/\./g, '').replace(',', '.')) || 0, 0);
+
+            if (qtd > 0 && comp > 0 && larg > 0 && alt > 0) {
+                volTotal += (comp * larg * alt) * qtd;
+                pesoTotal += peso * qtd;
+
+                if (comp > maiorCompItem) maiorCompItem = comp;
+                if (larg > maiorLargItem) maiorLargItem = larg;
+                if (alt > maiorAltItem) maiorAltItem = alt;
+
+                if (comp > vSelecionado.compFisico || larg > vSelecionado.largFisica || alt > vSelecionado.altFisica) {
+                    itemEstouraDimensao = true;
+                }
+
+                listaCarga.push({
+                    id: index + 1,
+                    nome: nome,
+                    qtd: qtd,
+                    comp: comp,
+                    larg: larg,
+                    alt: alt,
+                    peso: peso,
+                    cor: coresItens[index % coresItens.length]
+                });
+            }
+        });
+
+        if (listaCarga.length > 0) {
+            document.getElementById("bloco-mapa").style.display = "block";
+            renderizarArrumacaoLogica(vSelecionado, listaCarga);
+        } else {
+            document.getElementById("bloco-mapa").style.display = "none";
+            globalEstorouMetragem = false;
+        }
+
+        let veiculoIdeal = null;
+        for (let i = indexSel + 1; i < dbVeiculos.length; i++) {
+            let v = dbVeiculos[i];
+            let vVolMax = v.compFisico * v.largFisica * v.altFisica;
+            if (pesoTotal <= v.pesoMax && volTotal <= vVolMax && maiorCompItem <= v.compFisico && maiorLargItem <= v.largFisica && maiorAltItem <= v.altFisica) {
+                veiculoIdeal = v.nome;
+                break;
+            }
+        }
+
+        const divAlerta = document.getElementById("alerta-frota");
+        const divSugestao = document.getElementById("sugestao-frota");
+        const selo = document.getElementById("selo-compatibilidade");
+        const btnPdf = document.getElementById("btn-gerar-pdf");
+        const btnExcel = document.getElementById("btn-excel");
+
+        if (listaCarga.length === 0) {
+            selo.style.display = "none";
+            btnPdf.style.display = "none";
+            btnExcel.style.display = "none";
+            divAlerta.style.display = "none";
+            divSugestao.style.display = "none";
+        } else if (pesoTotal > vSelecionado.pesoMax || volTotal > volMaxVeiculoCalculado || itemEstouraDimensao || globalEstorouMetragem) {
+            selo.style.display="none"; 
+            btnPdf.style.display = "none";
+            btnExcel.style.display = "none";
+            
+            divAlerta.style.display = "block";
+            let motivo = "";
+            if (pesoTotal > vSelecionado.pesoMax) motivo += "• Peso total excede o limite máximo permitido.<br>";
+            if (volTotal > volMaxVeiculoCalculado) motivo += "• Volume total (m³) excede a capacidade cúbica do baú.<br>";
+            if (itemEstouraDimensao) motivo += "• Existem itens com dimensões isoladas maiores que as do próprio baú.<br>";
+            if (globalEstorouMetragem && pesoTotal <= vSelecionado.pesoMax) {
+                motivo += "• <strong>Aviso de Metragem:</strong> O peso está correto, porém o arranjo físico das caixas ultrapassou o comprimento linear útil do baú.<br>";
+            }
+            
+            divAlerta.innerHTML = `⚠️ <strong>ALERTA DE INCOMPATIBILIDADE DE ESPAÇO/PESO:</strong><br>${motivo}`;
+
+            if (veiculoIdeal) {
+                divSugestao.style.display = "block";
+                divSugestao.innerHTML = `💡 <strong>VEÍCULO IDEAL SUGERIDO:</strong> Para acomodar com segurança este volume de carga sem transbordo físico, altere a contratação para o veículo maior: <strong>${veiculoIdeal}</strong>.`;
+            } else {
+                divSugestao.style.display = "block";
+                divSugestao.innerHTML = `❌ <strong>ALERTA DE CAPACIDADE EXTREMA:</strong> A carga total informada ultrapassa os limites físicos e de arranjo até do maior veículo configurado (Carreta 3 Eixos). É necessário fracionar o lote de expedição ou utilizar múltiplos veículos.`;
+            }
+        } else {
+            divAlerta.style.display = "none";
+            divSugestao.style.display = "none";
+
+            selo.style.display = "block";
+            selo.className = "selo-compatibilidade selo-cabe";
+            selo.innerHTML = "STATUS: CARGA APROVADA"
+
+            btnPdf.style.display = "block";
+            btnExcel.style.display = "block";
+        }
+
+        document.getElementById("txt-peso").innerText = formatarBR(pesoTotal);
+        document.getElementById("max-peso").innerText = formatarBR(vSelecionado.pesoMax);
+
+        let pctPeso = Math.min((pesoTotal / vSelecionado.pesoMax) * 100, 100);
+        document.getElementById("bar-peso").style.width = pctPeso.toFixed(0) + "%";
+        document.getElementById("bar-peso").innerText = pctPeso.toFixed(0) + "%";
+        
+        const barPeso = document.getElementById("bar-peso");
+        barPeso.classList.remove("fill-verde","fill-amarelo","fill-vermelho","fill-piscando");
+        
+        if(pesoTotal > vSelecionado.pesoMax){
+            barPeso.classList.add("fill-piscando");
+        }else if(pctPeso >= 95){
+            barPeso.classList.add("fill-vermelho");
+        }else if(pctPeso >= 80){
+            barPeso.classList.add("fill-amarelo");
+        }else {
+            barPeso.classList.add("fill-verde");
+        }
+
+        document.getElementById("txt-vol").innerText = formatarBR(volTotal);
+        document.getElementById("max-vol").innerText = formatarBR(volMaxVeiculoCalculado);
+
+        let pctVol = Math.min((volTotal / volMaxVeiculoCalculado) * 100, 100);
+        const barVol = document.getElementById("bar-vol");
+        barVol.style.width = pctVol.toFixed(0) + "%";
+        barVol.innerText = pctVol.toFixed(0) + "%";
+
+        barVol.classList.remove("fill-verde","fill-amarelo","fill-vermelho","fill-piscando");
+
+        if (volTotal > volMaxVeiculoCalculado || globalEstorouMetragem) {
+            barVol.classList.add("fill-piscando");
+        } else if (pctVol >= 95) {
+            barVol.classList.add("fill-vermelho");
+        } else if (pctVol >= 80) {
+            barVol.classList.add("fill-amarelo");
+        } else {
+            barVol.classList.add("fill-verde");
+        }
+
+        document.getElementById("bloco-resultados").style.display = "block";
+    }
+
+    function renderizarArrumacaoLogica(veiculo, itens) {
+        const svgCima = document.getElementById("svg-cima");
+        const legendaContainer = document.getElementById("mapa-legenda");
+        const txtDimensoes = document.getElementById("dimesoes-bau-texto");
+        
+        svgCima.innerHTML = ""; 
+        legendaContainer.innerHTML = "";
+        globalEstorouMetragem = false;
+        globalItensExcedentes = [];
+
+        const larguraMaximaCanvasGeral = 750;
+        const alturaCanvasGeral = 220;
+        const margemBorda = 10;
+        const comprimentoMaximoReferencia = 13.50; 
+        const larguraMaximaReferencia = 2.45;
+
+        const escalaGlobalX = (larguraMaximaCanvasGeral - (margemBorda * 2)) / comprimentoMaximoReferencia;
+        const escalaGlobalY = (alturaCanvasGeral - (margemBorda * 2)) / larguraMaximaReferencia;
+
+        let larguraBauPixels = veiculo.compFisico * escalaGlobalX;
+        let alturaBauPixels = veiculo.largFisica * escalaGlobalY;
+
+        let caixasIndividuais = [];
+        itens.forEach(item => {
+            legendaContainer.innerHTML += `
+                <div class="legenda-item">
+                    <div class="legenda-cor" style="background-color: ${item.cor};"></div>
+                    <span>[Item ${item.id}] ${item.nome} (${item.qtd}x) - ${item.comp.toFixed(2)}m x ${item.larg.toFixed(2)}m</span>
+                </div>
+            `;
+
+            const nomeMinusculo = item.nome.toLowerCase();
+            let ehPalletOuBase = nomeMinusculo.includes("pallet") || nomeMinusculo.includes("palete") || nomeMinusculo.includes("base");
+            let textoInterno = "";
+            if (nomeMinusculo.includes("pallet") || nomeMinusculo.includes("palete")) textoInterno = "PALETE";
+            if (nomeMinusculo.includes("base")) textoInterno = "BASE";
+
+            let limiteEmpilhamento = (item.alt <= 0.80) ? 3 : 2;
+            if (ehPalletOuBase) limiteEmpilhamento = 1;
+            let limiteFisicoVeiculo = Math.floor(veiculo.altFisica / item.alt);
+            if (limiteFisicoVeiculo < 1) limiteFisicoVeiculo = 1;
+            let maxEmpilhamento = Math.min(limiteEmpilhamento, limiteFisicoVeiculo);
+
+            let qtdRestante = item.qtd;
+            while (qtdRestante > 0) {
+                let empilhadosNesseBloco = Math.min(qtdRestante, maxEmpilhamento);
+                qtdRestante -= empilhadosNesseBloco;
+
+                caixasIndividuais.push({
+                    id: item.id,
+                    nome: item.nome,
+                    comp: item.comp,
+                    larg: item.larg,
+                    cor: item.cor,
+                    ehPallet: ehPalletOuBase,
+                    textoTxt: textoInterno,
+                    empilhados: empilhadosNesseBloco,
+                    dimTexto: `${item.comp.toFixed(2)}x${item.larg.toFixed(2)}`,
+                    area: item.comp * item.larg
+                });
+            }
+        });
+
+        caixasIndividuais.sort((a, b) => b.comp - a.comp || b.area - a.area);
+
+        let espaçosLivres = [{
+            x: 0,
+            y: 0,
+            comp: veiculo.compFisico,
+            larg: veiculo.largFisica
+        }];
+
+        let caixasPosicionadas = [];
+
+        caixasIndividuais.forEach(caixa => {
+            let encaixou = false;
+
+            for (let i = 0; i < espaçosLivres.length; i++) {
+                let espaco = espaçosLivres[i];
+
+                let cabeNormal = (caixa.comp <= espaco.comp + 0.01) && (caixa.larg <= espaco.larg + 0.01);
+                let cabeGirado = (caixa.larg <= espaco.comp + 0.01) && (caixa.comp <= espaco.larg + 0.01);
+
+                if (cabeNormal || cabeGirado) {
+                    let compReal = cabeNormal ? caixa.comp : caixa.larg;
+                    let largReal = cabeNormal ? caixa.larg : caixa.comp;
+
+                    caixa.X_Fisico = espaco.x;
+                    caixa.Y_Fisico = espaco.y;
+                    caixa.compRender = compReal;
+                    caixa.largRender = largReal;
+
+                    caixasPosicionadas.push(caixa);
+
+                    let espacoDireita = {
+                        x: espaco.x + compReal,
+                        y: espaco.y,
+                        comp: espaco.comp - compReal,
+                        larg: espaco.larg 
+                    };
+
+                    let espacoCima = {
+                        x: espaco.x,
+                        y: espaco.y + largReal,
+                        comp: compReal,
+                        larg: espaco.larg - largReal
+                    };
+
+                    espaçosLivres.splice(i, 1);
+
+                    if (espacoDireita.comp > 0.01 && espacoDireita.larg > 0.01) espaçosLivres.push(espacoDireita);
+                    if (espacoCima.comp > 0.01 && espacoCima.larg > 0.01) espaçosLivres.push(espacoCima);
+
+                    espaçosLivres.sort((a, b) => a.x - b.x || a.y - b.y);
+                    
+                    for (let m = espaçosLivres.length - 1; m >= 0; m--) {
+                        for (let n = m - 1; n >= 0; n--) {
+                            let em = espaçosLivres[m];
+                            let en = espaçosLivres[n];
+                            if (em.x === en.x && em.comp === en.comp && (em.y === en.y + en.larg)) {
+                                en.larg += em.larg;
+                                espaçosLivres.splice(m, 1);
+                                break;
+                            }
+                            if (em.y === en.y && em.larg === en.larg && (em.x === en.x + em.comp)) {
+                                en.comp += em.comp;
+                                espaçosLivres.splice(m, 1);
+                                break;
+                            }
+                        }
+                    }
+                    encaixou = true;
+                    break;
+                }
+            }
+
+            if (!encaixou) {
+                globalEstorouMetragem = true;
+                globalItensExcedentes.push(caixa);
+                caixa.X_Fisico = veiculo.compFisico + 0.2 + ((globalItensExcedentes.length-1) * (caixa.comp + 0.15));
+                caixa.Y_Fisico = 0;
+                caixa.compRender = caixa.comp;
+                caixa.largRender = caixa.larg;
+                caixasPosicionadas.push(caixa);
+            }
+        });
+
+        let tamanhoFinalW = Math.max(larguraBauPixels + (margemBorda * 2), 750);
+        svgCima.setAttribute("width", tamanhoFinalW);
+        svgCima.setAttribute("height", alturaBauPixels + (margemBorda * 2));
+
+        if (globalEstorouMetragem) {
+            txtDimensoes.className = "dimensoes-bau-tag estourou";
+            txtDimensoes.innerHTML = `⚠️ EXCESSO DE METRAGEM LINEAR (${veiculo.nome}): Espaço de ${veiculo.compFisico.toFixed(2)}m esgotado! Carga transbordando para fora do baú.`;
+        } else {
+            txtDimensoes.className = "dimensoes-bau-tag";
+            txtDimensoes.innerHTML = `📏 Espaço Útil do Baú (${veiculo.nome}): Comprimento: ${veiculo.compFisico.toFixed(2)}m | Largura: ${veiculo.largFisica.toFixed(2)}m | Altura Máx: ${veiculo.altFisica.toFixed(2)}m`;
+        }
+
+        let bgRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        bgRect.setAttribute("x", margemBorda);
+        bgRect.setAttribute("y", margemBorda);
+        bgRect.setAttribute("width", larguraBauPixels);
+        bgRect.setAttribute("height", alturaBauPixels);
+        bgRect.setAttribute("fill", globalEstorouMetragem ? "#fff5f5" : "#f8fafc");
+        bgRect.setAttribute("stroke", globalEstorouMetragem ? "#ef4444" : "#1e3a8a");
+        bgRect.setAttribute("stroke-width", "2.5");
+        if (globalEstorouMetragem) bgRect.setAttribute("stroke-dasharray", "8,4");
+        svgCima.appendChild(bgRect);
+
+        caixasPosicionadas.forEach(c => {
+            let posX = margemBorda + (c.X_Fisico * escalaGlobalX);
+            let posY = margemBorda + (c.Y_Fisico * escalaGlobalY);
+            let widthPX = c.compRender * escalaGlobalX;
+            let heightPX = c.largRender * escalaGlobalY;
+
+            let rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            rect.setAttribute("x", posX);
+            rect.setAttribute("y", posY);
+            rect.setAttribute("width", widthPX);
+            rect.setAttribute("height", heightPX);
+            rect.setAttribute("fill", c.cor);
+            rect.setAttribute("stroke", "#ffffff");
+            rect.setAttribute("stroke-width", "1.5");
+            
+            if (c.X_Fisico + c.compRender > veiculo.compFisico) {
+                rect.setAttribute("stroke", "#dc2626");
+                rect.setAttribute("stroke-width", "2");
+            }
+            svgCima.appendChild(rect);
+
+            if (c.ehPallet) {
+                let textoIdentificador = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                textoIdentificador.setAttribute("x", posX + (widthPX / 2));
+                textoIdentificador.setAttribute("y", posY + (heightPX / 2) - 2);
+                textoIdentificador.setAttribute("fill", "#ffffff");
+                textoIdentificador.setAttribute("font-size", "9px");
+                textoIdentificador.setAttribute("font-weight", "bold");
+                textoIdentificador.setAttribute("text-anchor", "middle");
+                textoIdentificador.textContent = c.textoTxt;
+                svgCima.appendChild(textoIdentificador);
+
+                if (widthPX > 28 && heightPX > 20) {
+                    let textoMedidaPallet = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    textoMedidaPallet.setAttribute("x", posX + (widthPX / 2));
+                    textoMedidaPallet.setAttribute("y", posY + (heightPX / 2) + 8);
+                    textoMedidaPallet.setAttribute("fill", "rgba(255,255,255,0.85)");
+                    textoMedidaPallet.setAttribute("font-size", "8px");
+                    textoMedidaPallet.setAttribute("text-anchor", "middle");
+                    textoMedidaPallet.textContent = c.dimTexto;
+                    svgCima.appendChild(textoMedidaPallet);
+                }
+            } else {
+                if (widthPX > 24 && heightPX > 18) {
+                    let textoMedida = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    let deslocamentoY = (c.empilhados > 1) ? -4 : 3;
+                    
+                    textoMedida.setAttribute("x", posX + (widthPX / 2));
+                    textoMedida.setAttribute("y", posY + (heightPX / 2) + deslocamentoY);
+                    textoMedida.setAttribute("fill", "#ffffff");
+                    textoMedida.setAttribute("font-size", "8.5px");
+                    textoMedida.setAttribute("font-weight", "normal");
+                    textoMedida.setAttribute("text-anchor", "middle");
+                    textoMedida.textContent = c.dimTexto;
+                    svgCima.appendChild(textoMedida);
+                }
+
+                if (c.empilhados > 1) {
+                    let sombreado = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                    sombreado.setAttribute("x", posX + 3);
+                    sombreado.setAttribute("y", posY + 3);
+                    sombreado.setAttribute("width", widthPX - 6);
+                    sombreado.setAttribute("height", heightPX - 6);
+                    sombreado.setAttribute("fill", "none");
+                    sombreado.setAttribute("stroke", "rgba(0,0,0,0.2)");
+                    sombreado.setAttribute("stroke-width", "1.5");
+                    sombreado.setAttribute("stroke-dasharray", "3,2");
+                    svgCima.appendChild(sombreado);
+
+                    let textoQtd = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    textoQtd.setAttribute("x", posX + (widthPX / 2));
+                    textoQtd.setAttribute("y", posY + (heightPX / 2) + 7);
+                    textoQtd.setAttribute("fill", "#ffffff");
+                    textoQtd.setAttribute("font-size", "9px");
+                    textoQtd.setAttribute("font-weight", "bold");
+                    textoQtd.setAttribute("text-anchor", "middle");
+                    textoQtd.textContent = `${c.empilhados}x`;
+                    svgCima.appendChild(textoQtd);
+                }
+            }
+        });
+
+        const resumoExcedente = document.getElementById("resumo-excedente");
+       
+    }
+
+    function gerarRelatorioPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        const veiculoSelect = document.getElementById("select-veiculo");
+        const veiculoNome = veiculoSelect.options[veiculoSelect.selectedIndex].text;
+        const pesoTotal = document.getElementById("txt-peso").innerText;
+        let statusSelo = document.getElementById("selo-compatibilidade").innerText;
+        statusSelo = statusSelo.replace(/['"`收藏“”]/g, "").trim();
+        
+        doc.setFontSize(18);
+        doc.setTextColor(30, 58, 138); 
+        doc.text("Relatório de Dimensionamento de Carga", 105, 20, { align: "center" });
+        
+        doc.setFontSize(12);
+        doc.setTextColor(100);
+        const agora = new Date();
+        const codigoSimulacao = "DCPRO-" + agora.getFullYear() + String(agora.getMonth()+1).padStart(2,"0") + String(agora.getDate()).padStart(2,"0") + "-" + String(agora.getHours()).padStart(2,"0") + String(agora.getMinutes()).padStart(2,"0") + String(agora.getSeconds()).padStart(2,"0");
+        
+        doc.text("Data da Simulação: " + agora.toLocaleString(), 105, 30, { align: "center" });
+        doc.text("Código da Simulação: " + codigoSimulacao, 105, 37, { align: "center" });
+        doc.line(20, 42, 190, 42); 
+
+doc.setTextColor(0);
+    
+    // Título "Veículo Selecionado"
+    doc.setFontSize(12);
+    doc.setFont(undefined, "bold"); 
+    doc.text("Veículo Selecionado:", 20, 58); 
+    
+    // Nome do Veículo com limite de largura (maxWidth) para quebrar linha automaticamente
+    doc.setFontSize(10);
+    doc.setFont(undefined, "normal"); 
+    doc.text(veiculoNome, 70, 58, { maxWidth: 120 });
+
+    let pesoNumerico = parseFloat(document.getElementById("txt-peso").innerText.replace(',', '.'));
+doc.setFont(undefined, "bold"); 
+doc.text("Peso Total Estimado:", 20, 66); 
+doc.setFont(undefined, "normal"); 
+doc.text(pesoNumerico.toFixed(2) + " kg", 70, 66);
+
+        const totalVolumes = document.querySelectorAll("#tabela-carga tbody tr").length; 
+        doc.setFont(undefined, "bold"); doc.text("Total de Itens:", 20, 74); 
+        doc.setFont(undefined, "normal"); doc.text(String(totalVolumes), 70, 74);
+
+        doc.setFontSize(16);
+        if(statusSelo.toUpperCase().includes("NÃO")){doc.setTextColor(200,0,0);}else{doc.setTextColor(0,128,0);}
+        
+        doc.text(statusSelo, 105, 88, { align: "center" }); 
+
+        doc.setFont(undefined, "normal"); 
+        doc.line(20, 93, 190, 93);
+        doc.setTextColor(0);
+
+        const tableBody = [];
+        const rows = document.querySelectorAll("#tabela-carga tbody tr");
+        
+        rows.forEach((tr) => {
+            const nome = tr.querySelector(".nome").value;
+            const qtd = tr.querySelector(".qtd").value;
+            const comp = tr.querySelector(".comp").value;
+            const larg = tr.querySelector(".larg").value;
+            const alt = tr.querySelector(".alt").value;
+            const peso = tr.querySelector(".peso").value;
+            
+            tableBody.push([
+                nome || "Item",
+                qtd,
+                comp + "m",
+                larg + "m",
+                alt + "m",
+                peso + " kg"
+            ]);
+        });
+
+        doc.autoTable({
+            startY: 100,
+            head: [['Item', 'Qtd', 'Comp', 'Larg', 'Alt', 'Peso Unit']],
+            body: tableBody,
+            headStyles: { fillColor: [30, 58, 138] },
+            theme: 'grid'
+        });
+
+        const finalY = doc.lastAutoTable.finalY + 20;
+        doc.setFontSize(10);
+        doc.setTextColor(70, 70, 70);
+        doc.text("Nota de Segurança: Esta projeção é um cálculo matemático e não substitui a frequência técnica", 20, finalY);
+        doc.text("presencial e as normas de amarração de carga rodoviária.", 20, finalY + 6);
+
+        doc.line(20, finalY + 30, 90, finalY + 30);
+        doc.text("Assinatura do Motorista", 20, finalY + 35);
+
+        doc.line(120, finalY + 30, 190, finalY + 30);
+        doc.text("Assinatura do Conferente", 120, finalY + 35);
+
+        doc.setFontSize(8);
+        doc.setTextColor(120);
+        doc.text("Relatório gerado automaticamente pelo  DCPRO.",105,285,{align:"center"});
+
+        doc.save("Relatorio_Carga_ DCPRO.pdf");
+    }
+
+  function exportarExcel() {
+    try {
+        const rows = document.querySelectorAll("#tabela-carga tbody tr");
+        
+        let dadosPlanilha = [
+            ["🚚 DCPRO"],
+            ["ROMANEIO DE CARGA E DIMENSIONAMENTO"],
+            [""],
+            ["Código da Simulação", "🚚 DCPRO-1782051636195"],
+            ["Data/Hora", new Date().toLocaleString()],
+            [""],
+            ["DADOS DA OPERAÇÃO"],
+            ["Veículo Selecionado", document.getElementById("select-veiculo").options[document.getElementById("select-veiculo").selectedIndex].text],
+            ["Volume Total", document.getElementById("txt-vol").innerText + " m³"],
+            ["Peso Total", document.getElementById("txt-peso").innerText + " kg"],
+            [""],
+            ["STATUS: CARGA APROVADA"],
+            [""],
+            ["Carga ID"], // Linha 14 apenas com o título principal
+            ["Ref", "Identificação/Tipo", "QTD", "COMP", "LARG", "ALT", "PESO (KG)"] // Nova linha 15
+        ];
+
+        rows.forEach((tr, index) => {
+            dadosPlanilha.push([
+                "Item " + (index + 1),
+                tr.querySelector(".nome")?.value || "-",
+                tr.querySelector(".qtd")?.value || "0",
+                tr.querySelector(".comp")?.value || "0",
+                tr.querySelector(".larg")?.value || "0",
+                tr.querySelector(".alt")?.value || "0",
+                tr.querySelector(".peso")?.value || "0"
+            ]);
+        });
+
+        // 1. Definição dos Estilos
+        const estiloHeader = {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "002060" } },
+            alignment: { horizontal: "center", vertical: "center" }
+        };
+
+        const estiloDados = {
+            font: { bold: false}, //Alterado para false
+            alignment: { horizontal: "center", vertical: "center" }, // CENTRALIZADO
+            border: { top: {style: "thin"}, bottom: {style: "thin"}, left: {style: "thin"}, right: {style: "thin"} }
+        };
+
+       let ws = {};
+        for(let R = 0; R < dadosPlanilha.length; ++R) {
+            for(let C = 0; C < 10; ++C) {
+                let cell_ref = XLSX.utils.encode_cell({c:C, r:R});
+                let valor = (dadosPlanilha[R] && dadosPlanilha[R][C] !== undefined) ? dadosPlanilha[R][C] : "";
+                
+                // Criamos a célula já com um estilo "limpo" (fundo branco)
+                ws[cell_ref] = { 
+                    t: 's', 
+                    v: valor,
+                    s: {
+                        fill: { fgColor: { rgb: "FFFFFF" } },
+                        font: { color: { rgb: "000000" } },
+                        alignment: { horizontal: "center", vertical: "center" }
+                    }
+                };
+            }
+        }
+
+// 1. Aplicar estiloHeader (CABEÇALHOS GERAIS do topo)
+[0, 1, 6, 11, 13].forEach(r => {
+    for (let c = 0; c < 10; c++) {
+        let cellRef = XLSX.utils.encode_cell({r: r, c: c});
+        if (ws[cellRef]) ws[cellRef].s = estiloHeader;
+    }
+});
+
+// 2. Aplicar estiloHeader na linha 15 (CABEÇALHO DA TABELA - índice 14)
+for (let c = 0; c < 7; c++) {
+    let cellRef = XLSX.utils.encode_cell({r: 14, c: c});
+    if (ws[cellRef]) ws[cellRef].s = estiloHeader;
+}
+
+// 3. Aplicar estiloDados (SEM NEGRITO E FUNDO BRANCO) da linha 16 em diante (índice 15)
+for (let r = 15; r < dadosPlanilha.length; r++) {
+    for (let c = 0; c < 7; c++) {
+        let cellRef = XLSX.utils.encode_cell({r: r, c: c});
+        if (ws[cellRef]) {
+            ws[cellRef].s = {
+                font: { bold: false, color: { rgb: "000000" } },
+                fill: { fgColor: { rgb: "FFFFFF" } },
+                alignment: { horizontal: "center", vertical: "center" },
+                border: { 
+                    top: {style: "thin", color: {rgb: "000000"}}, 
+                    bottom: {style: "thin", color: {rgb: "000000"}}, 
+                    left: {style: "thin", color: {rgb: "000000"}}, 
+                    right: {style: "thin", color: {rgb: "000000"}} 
+                }
+            };
+        }
+    }
+}
+
+        ws['!merges'] = [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } },
+            { s: { r: 6, c: 0 }, e: { r: 6, c: 9 } },
+            { s: { r: 11, c: 0 }, e: { r: 11, c: 9 } },
+            { s: { r: 13, c: 0 }, e: { r: 13, c: 9 } }
+        ];
+
+        // 4. Largura da Coluna B ajustada para 40
+        ws['!cols'] = [{wch: 15}, {wch: 40}, {wch: 8}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 12}];
+        ws['!ref'] = XLSX.utils.encode_range({ s: {c:0, r:0}, e: {c:9, r:dadosPlanilha.length-1} });
+
+        let wb = { SheetNames: ["Romaneio"], Sheets: { "Romaneio": ws } };
+        let wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' });
+
+        function s2ab(s) {
+            let buf = new ArrayBuffer(s.length);
+            let view = new Uint8Array(buf);
+            for (let i = 0; i < s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+            return buf;
+        }
+
+        let blob = new Blob([s2ab(wbout)], { type: 'application/octet-stream' });
+        let url = URL.createObjectURL(blob);
+        let a = document.createElement("a");
+        a.href = url;
+        // Gera a data e hora atual no formato desejado
+let agora = new Date();
+let dataHora = agora.toLocaleDateString('pt-BR').replace(/\//g, '-') + "_" + 
+               agora.getHours() + "h" + 
+               agora.getMinutes().toString().padStart(2, '0');
+
+// Define o nome do arquivo dinamicamente
+a.download = "Romaneio_Urbanos_Vans_" + dataHora + ".xlsx";
+        a.click();
+
+    } catch (e) {
+        console.error("Erro:", e);
+        alert("Erro na exportação: " + e.message);
+    }
+}
+    function limparTudo() {
+        const tbody = document.querySelector("#tabela-carga tbody");
+        tbody.innerHTML = "";
+
+        document.getElementById("bloco-resultados").style.display = "none";
+        document.getElementById("bloco-mapa").style.display = "none";
+        document.getElementById("alerta-frota").style.display = "none";
+        document.getElementById("sugestao-frota").style.display = "none";
+        document.getElementById("selo-compatibilidade").style.display = "none";
+        document.getElementById("btn-gerar-pdf").style.display = "none";
+        document.getElementById("btn-excel").style.display = "none";
+
+        document.getElementById("svg-cima").innerHTML = "";
+        document.getElementById("mapa-legenda").innerHTML = "";
+
+        document.getElementById("txt-peso").innerText = "0";
+        document.getElementById("max-peso").innerText = "0";
+
+        document.getElementById("bar-peso").style.width = "0%";
+        document.getElementById("bar-peso").innerText = "0%";
+        document.getElementById("txt-vol").innerText = "0";
+        document.getElementById("max-vol").innerText = "0";
+        document.getElementById("bar-vol").style.width = "0%";
+        document.getElementById("bar-vol").innerText = "0%";
+
+        document.getElementById("dimesoes-bau-texto").innerHTML = "Dimensões Internas Disponíveis: -";
+        globalEstorouMetragem = false;
+
+        adicionarLinha();
+        const aviso = document.getElementById('avisoItensIncompletos');
+        if(aviso) aviso.style.display = 'none';
+    }
+
+    window.onload = function() {
+        adicionarLinha();
+    };
+  function aplicarBloqueio() {
+        const classes = ['qtd', 'comp', 'larg', 'alt', 'peso'];
+        classes.forEach(classe => {
+            const inputs = document.querySelectorAll('.' + classe);
+            inputs.forEach(input => {
+                input.removeEventListener('keydown', bloquearLetras);
+                input.addEventListener('keydown', bloquearLetras);
+            });
+        });
+    }
+
+    function bloquearLetras(event) {
+        // Permite teclas de controle: Backspace, Tab, Enter, Delete, Setas, etc.
+        const teclasPermitidas = [8, 9, 13, 46, 37, 39, 190, 110, 188];
+        if ((event.keyCode < 48 || event.keyCode > 57) && 
+            (event.keyCode < 96 || event.keyCode > 105) && 
+            !teclasPermitidas.includes(event.keyCode)) {
+            event.preventDefault();
+        }
+    }
+    
+</script>
+<div class="rodape">
+        DCPRO V1,O BETA
+    </div>
+</body>
+</body>
+</html>
