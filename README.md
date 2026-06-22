@@ -1,4 +1,4 @@
-imensionador de Carga Pro
+Dimensionador de Carga Pro
 
 Ferramenta desenvolvida para realizar o dimensionamento de cargas e otimização de espaço em veículos de transporte.
 
