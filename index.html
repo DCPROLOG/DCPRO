@@ -7,7 +7,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
     <style>
@@ -1555,6 +1555,7 @@ document.getElementById(dimensaoID);
 
 function exportarExcel() {
     try {
+        
         const rows = document.querySelectorAll("#tabela-carga tbody tr");
 
         const agora = new Date();
@@ -1581,9 +1582,7 @@ function exportarExcel() {
             const alt = (parseFloat(tr.querySelector(".alt")?.value.replace(",", ".")) || 0) / 100;
 
             const peso = Number(
-                tr.querySelector(".peso")?.value
-                    .replace(/\./g, "")
-                    .replace(",", ".")
+                tr.querySelector(".peso")?.value.replace(/\./g, "").replace(",", ".")
             ) || 0;
 
             pesoTotal += peso * qtd;
@@ -1603,44 +1602,14 @@ function exportarExcel() {
         });
 
         const cargas = planejarFrota(listaCarga);
+
         const wb = XLSX.utils.book_new();
 
         const azul = "1E3A8A";
         const azulClaro = "EAF2FF";
-        const verde = "DFF7E8";
+        const verde = "DCFCE7";
         const branco = "FFFFFF";
         const cinza = "F8FAFC";
-
-        function styleHeader(cell) {
-            cell.s = {
-                font: { bold: true, color: { rgb: branco } },
-                fill: { fgColor: { rgb: azul } },
-                alignment: { horizontal: "center", vertical: "center" },
-                border: borda()
-            };
-        }
-
-        function styleTitle(cell) {
-            cell.s = {
-                font: { bold: true, sz: 16, color: { rgb: azul } },
-                alignment: { horizontal: "center", vertical: "center" }
-            };
-        }
-
-        function styleSubTitle(cell) {
-            cell.s = {
-                font: { bold: true, color: { rgb: azul } },
-                fill: { fgColor: { rgb: azulClaro } },
-                border: borda()
-            };
-        }
-
-        function styleCell(cell) {
-            cell.s = {
-                border: borda(),
-                alignment: { vertical: "center" }
-            };
-        }
 
         function borda() {
             return {
@@ -1651,7 +1620,20 @@ function exportarExcel() {
             };
         }
 
-        function aplicarEstiloTabela(ws, rangeRef) {
+        function estiloCelula(bg, cor = "000000", bold = false, tamanho = 11, centro = false) {
+            return {
+                font: { bold, sz: tamanho, color: { rgb: cor } },
+                fill: { patternType: "solid", fgColor: { rgb: bg } },
+                border: borda(),
+                alignment: {
+                    horizontal: centro ? "center" : "left",
+                    vertical: "center",
+                    wrapText: true
+                }
+            };
+        }
+
+        function aplicarEstilo(ws, rangeRef) {
             const range = XLSX.utils.decode_range(rangeRef);
 
             for (let R = range.s.r; R <= range.e.r; R++) {
@@ -1660,59 +1642,186 @@ function exportarExcel() {
                     if (!ws[ref]) continue;
 
                     if (R === range.s.r) {
-                        styleHeader(ws[ref]);
+                        ws[ref].s = estiloCelula(azul, branco, true, 11, true);
                     } else {
-                        styleCell(ws[ref]);
-                        if (R % 2 === 0) {
-                            ws[ref].s.fill = { fgColor: { rgb: cinza } };
-                        }
+                        ws[ref].s = estiloCelula(R % 2 === 0 ? cinza : branco);
                     }
                 }
             }
         }
 
+        // =========================
         // ABA RESUMO
-        const resumo = [
-            ["DCPRO - DIMENSIONADOR DE CARGA PRO"],
-            ["ROMANEIO DE CARGA E DIMENSIONAMENTO"],
-            [],
-            ["Código da Simulação", codigoSimulacao],
-            ["Data/Hora", agora.toLocaleString()],
-            ["Status", "CARGA APROVADA"],
-            ["Peso Total", formatarBR(pesoTotal) + " kg"],
-            ["Volume Total", formatarBR(volumeTotal) + " m³"],
-            ["Total de Itens", listaCarga.length],
-            ["Quantidade de Veículos", cargas.length],
-            [],
-            ["VEÍCULOS UTILIZADOS"],
-        ];
+        // =========================
+        // =========================
+// ABA RESUMO - DASHBOARD
+// =========================
+const resumo = [
+    ["DCPRO - DIMENSIONADOR DE CARGA PRO", "", "", "", ""],
+    ["RELATÓRIO OPERACIONAL DE CARGA", "", "", "", ""],
+    ["", "", "", "", ""],
+    ["Código", codigoSimulacao, "", "Data/Hora", agora.toLocaleString()],
+    ["Status", "CARGA APROVADA", "", "Veículos", cargas.length],
+    ["PESO TOTAL", "VOLUME TOTAL", "ITENS", "VEÍCULOS", "STATUS"],
+    [
+        formatarBR(pesoTotal) + " kg",
+        formatarBR(volumeTotal) + " m³",
+        listaCarga.length,
+        cargas.length,
+        "APROVADO"
+    ],
+    ["", "", "", ""],
+    ["FROTA UTILIZADA", "", "", "", ""],
+    ["Veículo", "Modelo", "Peso", "Volume", "Ocupação"]
+];
 
-        cargas.forEach((carga, index) => {
-            resumo.push([`Veículo ${index + 1}`, carga.veiculo.nome]);
-        });
+cargas.forEach((carga, index) => {
+    const v = carga.veiculo;
+    const volMax = v.compFisico * v.largFisica * v.altFisica;
+    const pctPeso = (carga.pesoAtual / v.pesoMax) * 100;
 
-        const wsResumo = XLSX.utils.aoa_to_sheet(resumo);
-        wsResumo["!merges"] = [
-            { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
-            { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } }
-        ];
-        wsResumo["!cols"] = [{ wch: 28 }, { wch: 35 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+    resumo.push([
+        `Veículo ${index + 1}`,
+        v.nome,
+        `${formatarBR(carga.pesoAtual)} / ${formatarBR(v.pesoMax)} kg`,
+        `${formatarBR(carga.volumeAtual)} / ${formatarBR(volMax)} m³`,
+        pctPeso.toFixed(0) + "%"
+    ]);
+});
 
-        styleTitle(wsResumo["A1"]);
-        styleTitle(wsResumo["A2"]);
+resumo.push(["", "", "", "", ""]);
 
-        ["A4","A5","A6","A7","A8","A9","A10","A12"].forEach(ref => {
-            if (wsResumo[ref]) styleSubTitle(wsResumo[ref]);
-        });
+resumo.push(["OBSERVAÇÕES", "", "", "", ""]);
 
-        for (let ref in wsResumo) {
-            if (ref[0] !== "!" && !wsResumo[ref].s) styleCell(wsResumo[ref]);
+resumo.push([
+    "Relatório gerado automaticamente pelo DCPRO.",
+    "",
+    "",
+    "",
+    ""
+]);
+
+resumo.push([
+    "A projeção apresentada é matemática e serve como apoio operacional. Não substitui conferência técnica presencial, inspeção da carga ou critérios de segurança para transporte.",
+    "",
+    "",
+    "",
+    ""
+]);
+
+const wsResumo = XLSX.utils.aoa_to_sheet(resumo);
+
+wsResumo["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },  // Título
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },  // Subtítulo
+    { s: { r: 8, c: 0 }, e: { r: 8, c: 4 } },  // Frota utilizada
+    { s: { r: 13 + cargas.length, c: 0 }, e: { r: 13 + cargas.length, c: 4 } }, // Observações
+    { s: { r: 14 + cargas.length, c: 0 }, e: { r: 14 + cargas.length, c: 4 } }, // Frase 1
+    { s: { r: 15 + cargas.length, c: 0 }, e: { r: 15 + cargas.length, c: 4 } }  // Frase 2
+];
+
+wsResumo["!cols"] = [
+    { wch: 26 },
+    { wch: 28 },
+    { wch: 24 },
+    { wch: 28 },
+    { wch: 18 }
+];
+
+wsResumo["!rows"] = [
+    { hpt: 34 }, // Linha 1
+    { hpt: 24 }, // Linha 2
+    { hpt: 10 }, // Linha 3
+    { hpt: 22 }, // Linha 4
+    { hpt: 22 }, // Linha 5
+    { hpt: 26 }, // Linha 6
+    { hpt: 32 }, // Linha 7
+    { hpt: 10 }, // Linha 8
+    { hpt: 24 }, // Linha 9
+    { hpt: 22 }, // Linha 10
+    { hpt: 22 }, // Linha 11
+    { hpt: 22 }, // Linha 12
+    { hpt: 10 }, // Linha 13
+    { hpt: 24 }, // Linha 14 - OBSERVAÇÕES
+    { hpt: 28 }, // Linha 15 - Frase 1
+    { hpt: 52 }  // Linha 16 - Frase 2
+];
+
+wsResumo["A1"].s = estiloCelula(azul, branco, true, 18, true);
+wsResumo["A2"].s = estiloCelula(azul, branco, true, 13, true);
+
+["A3", "D3", "A4", "D4"].forEach(ref => {
+    if (wsResumo[ref]) wsResumo[ref].s = estiloCelula(azulClaro, azul, true, 11);
+});
+
+["A6", "B6", "C6", "D6", "E6"].forEach(ref => {
+    if (wsResumo[ref]) wsResumo[ref].s = estiloCelula(azul, branco, true, 12, true);
+});
+
+["A7", "B7", "C7", "D7", "E7"].forEach(ref => {
+    if (wsResumo[ref]) wsResumo[ref].s = estiloCelula(verde, "166534", true, 15, true);
+});
+
+wsResumo["A9"].s = estiloCelula(azul, branco, true, 13, true);
+
+["A10", "B10", "C10", "D10", "E10"].forEach(ref => {
+    if (wsResumo[ref]) wsResumo[ref].s = estiloCelula(azul, branco, true, 11, true);
+});
+
+for (let i = 11; i <= 10 + cargas.length; i++) {
+    ["A", "B", "C", "D", "E"].forEach(col => {
+        const ref = col + i;
+        if (wsResumo[ref]) {
+            wsResumo[ref].s = estiloCelula(i % 2 === 0 ? cinza : branco, "000000", col === "A" || col === "B", 10);
         }
+    });
+}
 
+const linhaObs = 14 + cargas.length;
+const linhaObsTexto1 = linhaObs + 1;
+const linhaObsTexto2 = linhaObs + 2;
+
+if (wsResumo["A" + linhaObs]) {
+    wsResumo["A" + linhaObs].s = estiloCelula(azul, branco, true, 12, true);
+}
+
+if (wsResumo["A" + linhaObsTexto1]) {
+    wsResumo["A" + linhaObsTexto1].s = estiloCelula(branco, "000000", false, 10);
+    wsResumo["A" + linhaObsTexto1].s.alignment = {
+        horizontal: "left",
+        vertical: "center",
+        wrapText: true
+    };
+}
+
+if (wsResumo["A" + linhaObsTexto2]) {
+    wsResumo["A" + linhaObsTexto2].s = estiloCelula(branco, "000000", false, 10);
+    wsResumo["A" + linhaObsTexto2].s.alignment = {
+        horizontal: "left",
+        vertical: "top",
+        wrapText: true
+    };
+}
+
+for (let ref in wsResumo) {
+    if (ref[0] !== "!" && !wsResumo[ref].s) {
+        wsResumo[ref].s = estiloCelula(branco);
+    }
+}
+
+        // =========================
         // ABA ITENS
+        // =========================
         const itens = [[
-            "Item", "Identificação", "Qtd", "Comp (m)", "Larg (m)", "Alt (m)",
-            "Peso Unit. (kg)", "Peso Total (kg)", "Volume (m³)"
+            "Item",
+            "Identificação",
+            "Qtd",
+            "Comp (m)",
+            "Larg (m)",
+            "Alt (m)",
+            "Peso Unit. (kg)",
+            "Peso Total (kg)",
+            "Volume (m³)"
         ]];
 
         listaCarga.forEach(item => {
@@ -1731,17 +1840,26 @@ function exportarExcel() {
 
         const wsItens = XLSX.utils.aoa_to_sheet(itens);
         wsItens["!cols"] = [
-            { wch: 8 }, { wch: 25 }, { wch: 8 }, { wch: 12 }, { wch: 12 },
-            { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 14 }
+            { wch: 8 }, { wch: 25 }, { wch: 8 },
+            { wch: 12 }, { wch: 12 }, { wch: 12 },
+            { wch: 16 }, { wch: 16 }, { wch: 16 }
         ];
         wsItens["!autofilter"] = { ref: wsItens["!ref"] };
-        aplicarEstiloTabela(wsItens, wsItens["!ref"]);
+        aplicarEstilo(wsItens, wsItens["!ref"]);
 
+        // =========================
         // ABA VEÍCULOS
+        // =========================
         const veiculos = [[
-            "Veículo", "Peso Ocupado", "Peso Máximo", "% Peso",
-            "Volume Ocupado", "Volume Máximo", "% Volume",
-            "Área Ocupada", "Área Máxima"
+            "Veículo",
+            "Peso Ocupado",
+            "Peso Máximo",
+            "% Peso",
+            "Volume Ocupado",
+            "Volume Máximo",
+            "% Volume",
+            "Área Ocupada",
+            "Área Máxima"
         ]];
 
         cargas.forEach((carga, index) => {
@@ -1751,29 +1869,38 @@ function exportarExcel() {
             const areaOcupada = Math.min(carga.areaAtual || 0, areaMax);
 
             veiculos.push([
-                `Veículo ${index + 1} - ${v.nome}`,
-                carga.pesoAtual,
-                v.pesoMax,
-                carga.pesoAtual / v.pesoMax,
-                carga.volumeAtual,
-                volMax,
-                carga.volumeAtual / volMax,
-                areaOcupada,
-                areaMax
-            ]);
+    `Veículo ${index + 1} - ${v.nome}`,
+    formatarBR(carga.pesoAtual) + " kg",
+    formatarBR(v.pesoMax) + " kg",
+    ((carga.pesoAtual / v.pesoMax) * 100).toFixed(0) + "%",
+    formatarBR(carga.volumeAtual) + " m³",
+    formatarBR(volMax) + " m³",
+    ((carga.volumeAtual / volMax) * 100).toFixed(0) + "%",
+    formatarBR(areaOcupada) + " m²",
+    formatarBR(areaMax) + " m²"
+]);
         });
 
         const wsVeiculos = XLSX.utils.aoa_to_sheet(veiculos);
         wsVeiculos["!cols"] = [
             { wch: 30 }, { wch: 16 }, { wch: 16 }, { wch: 12 },
-            { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 16 }
+            { wch: 18 }, { wch: 18 }, { wch: 12 },
+            { wch: 16 }, { wch: 16 }
         ];
         wsVeiculos["!autofilter"] = { ref: wsVeiculos["!ref"] };
-        aplicarEstiloTabela(wsVeiculos, wsVeiculos["!ref"]);
+        aplicarEstilo(wsVeiculos, wsVeiculos["!ref"]);
 
+        // =========================
         // ABA DISTRIBUIÇÃO
+        // =========================
         const distribuicao = [[
-            "Veículo", "Item", "Identificação", "Qtd", "Dimensões", "Peso Unit.", "Peso Total"
+            "Veículo",
+            "Item",
+            "Identificação",
+            "Qtd",
+            "Dimensões",
+            "Peso Unit.",
+            "Peso Total"
         ]];
 
         cargas.forEach((carga, index) => {
@@ -1784,23 +1911,23 @@ function exportarExcel() {
                     item.nome,
                     item.qtd,
                     `${item.comp.toFixed(2)} x ${item.larg.toFixed(2)} x ${item.alt.toFixed(2)} m`,
-                    item.peso,
-                    item.peso * item.qtd
+                    formatarBR(item.peso) + " kg",
+                    formatarBR(item.peso * item.qtd) + " kg"
                 ]);
             });
         });
 
         const wsDistribuicao = XLSX.utils.aoa_to_sheet(distribuicao);
         wsDistribuicao["!cols"] = [
-            { wch: 30 }, { wch: 8 }, { wch: 25 }, { wch: 8 },
-            { wch: 24 }, { wch: 16 }, { wch: 16 }
+            { wch: 30 }, { wch: 8 }, { wch: 25 },
+            { wch: 8 }, { wch: 24 }, { wch: 16 }, { wch: 16 }
         ];
         wsDistribuicao["!autofilter"] = { ref: wsDistribuicao["!ref"] };
-        aplicarEstiloTabela(wsDistribuicao, wsDistribuicao["!ref"]);
+        aplicarEstilo(wsDistribuicao, wsDistribuicao["!ref"]);
 
         XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
-        XLSX.utils.book_append_sheet(wb, wsItens, "Itens");
-        XLSX.utils.book_append_sheet(wb, wsVeiculos, "Veiculos");
+        XLSX.utils.book_append_sheet(wb, wsItens, "Itens da Carga");
+        XLSX.utils.book_append_sheet(wb, wsVeiculos, "Frota");
         XLSX.utils.book_append_sheet(wb, wsDistribuicao, "Distribuicao");
 
         XLSX.writeFile(wb, "Romaneio_" + codigoSimulacao + ".xlsx");
