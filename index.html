@@ -210,22 +210,31 @@
         }
     }
 
-    function adicionarLinha() {
-        const tabela = document.getElementById("tabela-carga").getElementsByTagName('tbody')[0];
-        const novaLinha = tabela.insertRow();
-       novaLinha.innerHTML = `
-    <td><span class="label-linha">Item</span></td>
-    <td><input type="text" placeholder="Ex: Caixa A" class="nome"></td>
-    <td><input type="number" class="qtd" value="1" min="1" oninput="validarNumeros(this)"></td>
-    <td><input type="text" class="comp" placeholder="CM" oninput="validarNumeros(this)"></td>
-    <td><input type="text" class="larg" placeholder="CM" oninput="validarNumeros(this)"></td>
-    <td><input type="text" class="alt" placeholder="CM" oninput="validarNumeros(this)"></td>
-    <td><input type="text" class="peso" placeholder="KG" oninput="validarNumeros(this)"></td>
-    <td><button class="btn-danger" onclick="deletarLinha(this)">X</button></td>
-`;
-        atualizarLabelsEcores();
-    }
+    function adicionarLinha(salvar = true) {
+    const tabela = document.getElementById("tabela-carga").getElementsByTagName('tbody')[0];
+    const novaLinha = tabela.insertRow();
 
+    novaLinha.innerHTML = `
+        <td><span class="label-linha">Item</span></td>
+        <td><input type="text" placeholder="Ex: Caixa A" class="nome"></td>
+        <td><input type="number" class="qtd" value="1" min="1" oninput="validarNumeros(this)"></td>
+        <td><input type="text" class="comp" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td><input type="text" class="larg" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td><input type="text" class="alt" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td><input type="text" class="peso" placeholder="KG" oninput="validarNumeros(this)"></td>
+        <td><button class="btn-danger" onclick="deletarLinha(this)">X</button></td>
+    `;
+
+    novaLinha.querySelectorAll("input").forEach(input => {
+        input.addEventListener("input", salvarCarga);
+    });
+
+    atualizarLabelsEcores();
+
+    if (salvar) {
+        salvarCarga();
+    }
+}
     function deletarLinha(botao) {
         botao.parentNode.parentNode.remove();
         atualizarLabelsEcores();
@@ -1938,8 +1947,7 @@ for (let ref in wsResumo) {
     }
 }
 
-
-function gerarRelatorioPDF() {
+async function gerarRelatorioPDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
@@ -1961,15 +1969,15 @@ function gerarRelatorioPDF() {
     let volumeTotal = 0;
 
     rows.forEach((tr, index) => {
-        const nome = tr.querySelector(".nome").value || `Item ${index + 1}`;
-        const qtd = parseInt(tr.querySelector(".qtd").value) || 0;
+        const nome = tr.querySelector(".nome")?.value || `Item ${index + 1}`;
+        const qtd = parseInt(tr.querySelector(".qtd")?.value) || 0;
 
-        const comp = (parseFloat(tr.querySelector(".comp").value.replace(",", ".")) || 0) / 100;
-        const larg = (parseFloat(tr.querySelector(".larg").value.replace(",", ".")) || 0) / 100;
-        const alt = (parseFloat(tr.querySelector(".alt").value.replace(",", ".")) || 0) / 100;
+        const comp = (parseFloat(tr.querySelector(".comp")?.value.replace(",", ".")) || 0) / 100;
+        const larg = (parseFloat(tr.querySelector(".larg")?.value.replace(",", ".")) || 0) / 100;
+        const alt = (parseFloat(tr.querySelector(".alt")?.value.replace(",", ".")) || 0) / 100;
 
         const peso = Number(
-            tr.querySelector(".peso").value
+            tr.querySelector(".peso")?.value
                 .replace(/\./g, "")
                 .replace(",", ".")
         ) || 0;
@@ -1991,7 +1999,9 @@ function gerarRelatorioPDF() {
 
     const cargas = planejarFrota(listaCarga);
 
-    // CABEÇALHO
+    // =========================
+    // CAPA / CABEÇALHO
+    // =========================
     doc.setFontSize(18);
     doc.setTextColor(30, 58, 138);
     doc.setFont(undefined, "bold");
@@ -2000,13 +2010,15 @@ function gerarRelatorioPDF() {
     doc.setFontSize(11);
     doc.setFont(undefined, "normal");
     doc.setTextColor(90);
-    doc.text("Relatório Técnico de Compatibilidade de Carga", 105, 26, { align: "center" });
+    doc.text("Relatório Operacional de Carga", 105, 26, { align: "center" });
     doc.text("Data da Simulação: " + agora.toLocaleString(), 105, 34, { align: "center" });
     doc.text("Código da Simulação: " + codigoSimulacao, 105, 41, { align: "center" });
 
     doc.line(20, 48, 190, 48);
 
+    // =========================
     // RESUMO GERAL
+    // =========================
     doc.setFontSize(13);
     doc.setTextColor(30, 58, 138);
     doc.setFont(undefined, "bold");
@@ -2028,7 +2040,9 @@ function gerarRelatorioPDF() {
 
     doc.line(20, 110, 190, 110);
 
+    // =========================
     // TABELA DE ITENS
+    // =========================
     const tableBody = listaCarga.map(item => [
         item.id,
         item.nome,
@@ -2049,54 +2063,63 @@ function gerarRelatorioPDF() {
 
     let y = doc.lastAutoTable.finalY + 12;
 
-    // RESUMO POR VEÍCULO
-    cargas.forEach((carga, index) => {
-        if (y > 240) {
-            doc.addPage();
-            y = 20;
-        }
+    // =========================
+    // LAYOUT VISUAL DA CARGA
+    // =========================
+    const blocosVeiculos = document.querySelectorAll(".bloco-veiculo");
 
-        const veiculo = carga.veiculo;
+    if (blocosVeiculos.length > 0) {
+        doc.addPage();
 
-        const pesoVeiculo = carga.pesoAtual || 0;
-        const volumeVeiculo = carga.volumeAtual || 0;
-
-        const volMaxVeiculo =
-            veiculo.compFisico *
-            veiculo.largFisica *
-            veiculo.altFisica;
-
-        const areaMaxVeiculo =
-            veiculo.compFisico *
-            veiculo.largFisica;
-
-        const areaBruta =
-            carga.areaAtual || 0;
-
-        const areaVeiculo =
-            Math.min(areaBruta, areaMaxVeiculo);
-
-        doc.setFillColor(248, 250, 252);
-        doc.setDrawColor(203, 213, 225);
-        doc.roundedRect(20, y, 170, 42, 3, 3, "FD");
-
-        doc.setFontSize(13);
+        doc.setFontSize(15);
         doc.setTextColor(30, 58, 138);
         doc.setFont(undefined, "bold");
-        doc.text(`Veículo ${index + 1}: ${veiculo.nome}`, 25, y + 10);
+        doc.text("Layout Visual da Carga", 105, 18, { align: "center" });
 
-        doc.setFontSize(9);
-        doc.setTextColor(0);
-        doc.setFont(undefined, "normal");
+        let yLayout = 30;
 
-        doc.text(`Peso: ${formatarBR(pesoVeiculo)} / ${formatarBR(veiculo.pesoMax)} kg`, 25, y + 20);
-        doc.text(`Volume: ${formatarBR(volumeVeiculo)} / ${formatarBR(volMaxVeiculo)} m³`, 25, y + 28);
-        doc.text(`Área útil: ${formatarBR(areaVeiculo)} / ${formatarBR(areaMaxVeiculo)} m²`, 25, y + 36);
+        for (let i = 0; i < blocosVeiculos.length; i++) {
+            const bloco = blocosVeiculos[i];
+            const carga = cargas[i];
 
-        y += 52;
-    });
+            if (yLayout > 220) {
+                doc.addPage();
+                yLayout = 20;
+            }
 
+            const alvoImagem = bloco;
+
+            const canvas = await html2canvas(alvoImagem, {
+                scale: 3,
+                backgroundColor: "#ffffff",
+                useCORS: true
+            });
+
+            const imgData = canvas.toDataURL("image/png");
+
+            const imgWidth = 170;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+            if (yLayout + imgHeight > 275) {
+                doc.addPage();
+                yLayout = 20;
+            }
+
+            doc.setDrawColor(203, 213, 225);
+            doc.setFillColor(255, 255, 255);
+            doc.roundedRect(20, yLayout - 2, 170, imgHeight + 4, 2, 2, "FD");
+
+            doc.addImage(imgData, "PNG", 22, yLayout, 166, imgHeight);
+
+            yLayout += imgHeight + 14;
+        }
+
+        y = yLayout;
+    }
+
+    // =========================
     // OBSERVAÇÕES
+    // =========================
     if (y > 230) {
         doc.addPage();
         y = 20;
@@ -2112,7 +2135,9 @@ function gerarRelatorioPDF() {
     doc.text("- A projeção é matemática e não substitui a conferência técnica presencial.", 20, y + 15);
     doc.text("- A acomodação final deve respeitar amarração, distribuição de peso e legislação vigente.", 20, y + 22);
 
+    // =========================
     // ASSINATURAS
+    // =========================
     y += 45;
 
     if (y > 260) {
@@ -2135,6 +2160,8 @@ function gerarRelatorioPDF() {
 }
 
     function limparTudo() {
+      localStorage.removeItem("dcpro_carga");
+      
         const tbody = document.querySelector("#tabela-carga tbody");
         tbody.innerHTML = "";
 
@@ -2161,14 +2188,64 @@ function gerarRelatorioPDF() {
        // Cada veículo cria sua própria faixa de dimensões.
         globalEstorouMetragem = false;
 
-        adicionarLinha();
+        adicionarLinha(false);
         const aviso = document.getElementById('avisoItensIncompletos');
         if(aviso) aviso.style.display = 'none';
     }
 
+function salvarCarga() {
+    const itens = [];
+
+    document.querySelectorAll("#tabela-carga tbody tr").forEach(linha => {
+        itens.push({
+            nome: linha.querySelector(".nome")?.value || "",
+            qtd: linha.querySelector(".qtd")?.value || "",
+            comp: linha.querySelector(".comp")?.value || "",
+            larg: linha.querySelector(".larg")?.value || "",
+            alt: linha.querySelector(".alt")?.value || "",
+            peso: linha.querySelector(".peso")?.value || ""
+        });
+    });
+
+    localStorage.setItem("dcpro_carga", JSON.stringify(itens));
+}
+
+function carregarCargaSalva() {
+    const dados = localStorage.getItem("dcpro_carga");
+
+    const tbody = document.querySelector("#tabela-carga tbody");
+    tbody.innerHTML = "";
+
+    if (!dados) {
+        adicionarLinha(false);
+        return;
+    }
+
+    const itens = JSON.parse(dados);
+
+    if (!Array.isArray(itens) || itens.length === 0) {
+        adicionarLinha(false);
+        return;
+    }
+
+    itens.forEach(item => {
+        adicionarLinha(false);
+
+        const linha = document.querySelector("#tabela-carga tbody tr:last-child");
+
+        linha.querySelector(".nome").value = item.nome || "";
+        linha.querySelector(".qtd").value = item.qtd || "1";
+        linha.querySelector(".comp").value = item.comp || "";
+        linha.querySelector(".larg").value = item.larg || "";
+        linha.querySelector(".alt").value = item.alt || "";
+        linha.querySelector(".peso").value = item.peso || "";
+    });
+
+    atualizarLabelsEcores();
+}
     window.onload = function() {
-        adicionarLinha();
-    };
+    carregarCargaSalva();
+};
     
 </script>
 <div class="rodape">
