@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+  <link rel="icon"
+      type="image/png"
+      href="https://i.postimg.cc/t4YmX7f6/file-00000000cb00720eb6df5590ec6d8b4d.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
@@ -17,74 +20,42 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
 
     <style>
-
-        :root {
-
-    /* ===== CORES ===== */
-
-    --dcpro-azul-principal: #1e3a8a;
-    --dcpro-azul-secundario: #2563eb;
-
-    --dcpro-verde: #22c55e;
-    --dcpro-verde-escuro: #16a34a;
-
-    --dcpro-roxo: #8b5cf6;
-    --dcpro-roxo-escuro: #7c3aed;
-
-    --dcpro-vermelho: #ef4444;
-
-    --dcpro-fundo: #f4f6f9;
-    --dcpro-card: #ffffff;
-
-    --dcpro-texto: #334155;
-    --dcpro-texto-claro: #64748b;
-
-    --dcpro-borda: #dbe3ef;
-
-    /* ===== RAIOS ===== */
-
-    --radius-sm: 10px;
-    --radius-md: 14px;
-    --radius-lg: 18px;
-
-    /* ===== SOMBRAS ===== */
-
-    --shadow-sm: 0 4px 10px rgba(15,23,42,.12);
-    --shadow-md: 0 8px 20px rgba(15,23,42,.08);
-    --shadow-lg: 0 12px 30px rgba(15,23,42,.10);
-
-    /* ===== TRANSIÇÃO ===== */
-
-   transition: var(--transition);
-
-}
-
         body {
     font-family: 'Inter', sans-serif;
     margin: 15px;
-    background-color: var(--dcpro-fundo);
-    color: var(--dcpro-cinza-700);
+    background-color: #f4f6f9;
+    color: #333;
     font-size: 14px;
 }
-        h1, h2 {
-    color: var(--dcpro-azul-900);
-    margin-bottom: 5px;
-    letter-spacing: -0.02em;
-}
-        .hero-header {
+        h1, h2 { color: #1e3a8a; margin-bottom: 5px; }
+        
+        
+        
     display: flex;
     align-items: center;
     gap: 14px;
     padding: 26px;
     margin-bottom: 22px;
-    background: linear-gradient(
-    135deg,
-    var(--dcpro-azul-principal),
-    var(--dcpro-azul-secundario)
-);
+    background: linear-gradient(135deg, #1e3a8a, #2563eb);
     color: white;
     border-radius: 18px;
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 10px 25px rgba(30, 58, 138, 0.22);
+}
+
+.hero-brand{
+    width:100%;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    text-align:center;
+}
+
+.logo-dcpro{
+    width:380px;
+    max-width:90%;
+    height:auto;
+    display:block;
+    margin:0 auto;
 }
 
 .hero-icon {
@@ -124,13 +95,13 @@
     font-weight: 700;
     margin-bottom: 4px;
 }
-        .container {
-    max-width: 1400px;
-    margin: 0 auto;
-    background: var(--dcpro-card);
-    padding: 22px;
-    border-radius: var(--dcpro-radius-lg);
-    box-shadow: var(--dcpro-shadow-lg);
+        .container{
+    max-width:1400px;
+    margin:0 auto;
+    background:#fff;
+    padding:22px;
+    border-radius:18px;
+    box-shadow:0 12px 30px rgba(15,23,42,.10);
 }
         .table-responsive {
     width: 100%;
@@ -149,20 +120,16 @@
     border-spacing: 0;
     overflow: hidden;
     border-radius: 16px;
-    background: var(--dcpro-card);
+    background: #ffffff;
 }
         th, td {
-    border: 1px solid var(--dcpro-borda);
+    border: 1px solid #dbe3ef;
     padding: 10px 8px;
     text-align: center;
     vertical-align: middle;
 }
         th {
-    background: linear-gradient(
-    135deg,
-    var(--dcpro-azul-principal),
-    var(--dcpro-azul-secundario)
-);
+    background: linear-gradient(135deg, #1e3a8a, #2563eb);
     color: white;
     font-size: 12px;
     font-weight: 800;
@@ -175,16 +142,16 @@
 select {
     padding: 10px 12px;
     text-align: center;
-    border: 1px solid var(--dcpro-borda);
+    border: 1px solid #cbd5e1;
     border-radius: 12px;
     box-sizing: border-box;
-    background: var(--dcpro-card);
-    transition: var(--transition);
+    background: #ffffff;
+    transition: all .2s ease;
 }
 input:focus,
 select:focus {
     outline: none;
-    border-color: var(--dcpro-azul-secundario);
+    border-color: #3b82f6;
     box-shadow: 0 0 0 4px rgba(59,130,246,.15);
 }
         input[type="number"] {
@@ -200,8 +167,8 @@ input[type="text"] {
         .secao-veiculo {
     margin: 18px 0 24px;
     padding: 22px;
-    background: var(--dcpro-card);
-    border: 1px solid var(--dcpro-borda);
+    background: #ffffff;
+    border: 1px solid #dbe3ef;
     border-radius: 18px;
     box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
 }
@@ -227,8 +194,8 @@ input[type="text"] {
     cursor: pointer;
     font-weight: 800;
     border-radius: 12px;
-    transition: var(--transition);
-    box-shadow: var(--shadow-sm);
+    transition: all 0.22s ease;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -246,7 +213,7 @@ input[type="text"] {
 }
 
 .btn-add {
-    background: linear-gradient(135deg, #3b82f6, var(--dcpro-azul-secundario));
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
     padding: 11px 16px;
     margin-bottom: 10px;
 }
@@ -280,12 +247,12 @@ input[type="text"] {
 }
 
 .btn-pdf {
-    background: linear-gradient(135deg, var(--dcpro-roxo), var(--dcpro-roxo-escuro));
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
     display: none;
 }
 
 .btn-excel {
-    background: linear-gradient(135deg, var(--dcpro-verde), #15803d);
+    background: linear-gradient(135deg, #22c55e, #15803d);
     display: none;
 }
         
@@ -310,11 +277,11 @@ input[type="text"] {
 
 .bar-bg{
     width:100%;
-    height:16px;
+    height:18px;
     background:#e2e8f0;
     border-radius:999px;
     overflow:hidden;
-    box-shadow: inset 0 2px 5px rgba(15,23,42,.08);
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.08);
 }
 
 .bar-fill{
@@ -328,8 +295,7 @@ input[type="text"] {
     padding-right:10px;
     color:#fff;
     font-size:11px;
-    font-weight:800;
-    letter-spacing:.02em;
+    font-weight:700;
 }
 
 .fill-peso{
@@ -362,7 +328,7 @@ input[type="text"] {
     border-radius: 18px;
     box-sizing: border-box;
     margin-bottom: 18px;
-    border: 1px solid var(--dcpro-borda);
+    border: 1px solid #dbe3ef;
     overflow-x: auto;
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
@@ -423,24 +389,8 @@ input[type="text"] {
     color: #64748b;
 }
 
-        .nota-formal {
-    margin-top: 24px;
-    padding: 18px 20px;
-    background: #f8fafc;
-    border: 1px solid var(--dcpro-borda);
-    border-left: 5px solid #2563eb;
-    border-radius: 16px;
-    color: #475569;
-    font-size: 13px;
-    line-height: 1.75;
-    text-align: justify;
-    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
-}
-
-.nota-formal strong {
-    color: #1e3a8a;
-    font-weight: 700;
-}
+        .nota-formal { margin-top: 20px; padding: 12px 15px; background-color: #f8fafc; border: 1px dashed #94a3b8; border-radius: 6px; color: #475569; font-size: 12px; line-height: 1.6; text-align: justify; }
+        .nota-formal strong { color: #1e3a8a; }
 
         .selo-compatibilidade {
     margin: 18px 0;
@@ -533,9 +483,9 @@ input[type="text"] {
     }
 
     .hero-header {
-        padding: 18px;
-        border-radius: 16px;
-    }
+    padding: 18px 18px 8px;
+    border-radius: 16px;
+}
 
     .hero-header h1 {
         font-size: 30px;
@@ -594,9 +544,14 @@ input[type="text"] {
 
     <div>
         
-        <h1>DCPRO</h1>
-        <p>Planejamento, cubagem, frota e layout visual da carga em um só lugar.</p>
-    </div>
+        <div class="hero-brand">
+
+    <img
+        src="https://i.postimg.cc/4NR3vgJ8/file-000000000db471f59983954b7715fd6b.png"
+        alt="DCPRO"
+        class="logo-dcpro">
+
+</div>
 </div>
 
     <div class="secao-veiculo">
@@ -692,16 +647,6 @@ input[type="text"] {
     <div id="selo-compatibilidade" class="selo-compatibilidade"></div>
 
     <div class="resultados" id="bloco-resultados" style="display: none;">
-        <div class="titulo-resultados">
-    <h2>
-        <i class="fas fa-chart-line"></i>
-        Resultado da Análise
-    </h2>
-
-    <p>
-        Planejamento automático da carga e validação da compatibilidade logística.
-    </p>
-</div>
         <h2>Análise de Ocupação do Veículo Selecionado</h2>
         <div class="metric-container">
             <label><strong>Capacidade de Peso Ocupado:</strong> <span id="txt-peso">0</span> kg de <span id="max-peso">0</span> kg</label>
@@ -717,7 +662,7 @@ input[type="text"] {
         <h2>📦 Planejamento da Carga</h2>
         <div class="mapa-titulo">Distribuição otimizada da carga no espaço útil do veículo.</div>
         
-        <div id="dimesoes-bau-texto" class="dimensoes-bau-tag">📐 Dimensões Internas do Veículo -</div>
+        <div id="dimesoes-bau-texto" class="dimensoes-bau-tag">Dimensões Internas Disponíveis: -</div>
 
        <div id="container-veiculos"></div>
         <div id="resumo-excedente" style="display:none;margin-top:12px;padding:12px;background:#fee2e2;border-left:5px solid #dc2626;border-radius:4px;"></div>
@@ -1920,7 +1865,7 @@ function criarMapaVeiculo(numero) {
 </h3>
 
     <div id="resumo-veiculo-${numero}" class="resultados" style="display:block;margin-bottom:12px;">
-        <i class="fas fa-chart-pie"></i> Resumo de Ocupação
+        <strong>Resumo de Ocupação</strong>
 
         <div class="metric-container">
             <label>
@@ -1946,7 +1891,7 @@ function criarMapaVeiculo(numero) {
     </div>
 
     <div id="dimesoes-${numero}" class="dimensoes-bau-tag">
-        📐 Dimensões Internas do Veículo -
+        Dimensões Internas Disponíveis: -
     </div>
 
     <div class="canvas-container">
