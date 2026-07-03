@@ -1,71 +1,464 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🚚 Dimensionador de Carga Pro </title>
+    <title> Dimensionador de Carga Pro </title>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
 
     <style>
-        body { font-family: Arial, sans-serif; margin: 15px; background-color: #f4f6f9; color: #333; font-size: 14px; }
-        h1, h2 { color: #1e3a8a; margin-bottom: 5px; }
-        .container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .table-responsive { overflow-x: auto; margin-top: 15px; }
-        table { width: 100%; border-collapse: collapse; min-width: 600px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-        th { background-color: #1e3a8a; color: white; font-size: 12px; }
-        input, select { padding: 6px; text-align: center; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        input[type="number"] { width: 65px; }
-        input[type="text"] { width: 110px; text-align: left; }
+
+        :root {
+
+    /* ===== CORES ===== */
+
+    --dcpro-azul-principal: #1e3a8a;
+    --dcpro-azul-secundario: #2563eb;
+
+    --dcpro-verde: #22c55e;
+    --dcpro-verde-escuro: #16a34a;
+
+    --dcpro-roxo: #8b5cf6;
+    --dcpro-roxo-escuro: #7c3aed;
+
+    --dcpro-vermelho: #ef4444;
+
+    --dcpro-fundo: #f4f6f9;
+    --dcpro-card: #ffffff;
+
+    --dcpro-texto: #334155;
+    --dcpro-texto-claro: #64748b;
+
+    --dcpro-borda: #dbe3ef;
+
+    /* ===== RAIOS ===== */
+
+    --radius-sm: 10px;
+    --radius-md: 14px;
+    --radius-lg: 18px;
+
+    /* ===== SOMBRAS ===== */
+
+    --shadow-sm: 0 4px 10px rgba(15,23,42,.12);
+    --shadow-md: 0 8px 20px rgba(15,23,42,.08);
+    --shadow-lg: 0 12px 30px rgba(15,23,42,.10);
+
+    /* ===== TRANSIÇÃO ===== */
+
+   transition: var(--transition);
+
+}
+
+        body {
+    font-family: 'Inter', sans-serif;
+    margin: 15px;
+    background-color: var(--dcpro-fundo);
+    color: var(--dcpro-cinza-700);
+    font-size: 14px;
+}
+        h1, h2 {
+    color: var(--dcpro-azul-900);
+    margin-bottom: 5px;
+    letter-spacing: -0.02em;
+}
+        .hero-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 26px;
+    margin-bottom: 22px;
+    background: linear-gradient(
+    135deg,
+    var(--dcpro-azul-principal),
+    var(--dcpro-azul-secundario)
+);
+    color: white;
+    border-radius: 18px;
+    box-shadow: var(--shadow-lg);
+}
+
+.hero-icon {
+    width: 54px;
+    height: 54px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.16);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+}
+
+.hero-header h1 {
+    color: white;
+    margin: 0;
+    font-size: 42px;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+}
+
+.hero-header p {
+    margin: 10px 0 0;
+    color: #dbeafe;
+    font-size: 18px;
+    line-height: 1.45;
+    font-weight: 400;
+    max-width: 650px;
+}
+
+.hero-kicker {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #bfdbfe;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+        .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    background: var(--dcpro-card);
+    padding: 22px;
+    border-radius: var(--dcpro-radius-lg);
+    box-shadow: var(--dcpro-shadow-lg);
+}
+        .table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin-top: 18px;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    border-radius: 16px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+        table {
+    width: 100%;
+    min-width: 980px;
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
+    border-radius: 16px;
+    background: var(--dcpro-card);
+}
+        th, td {
+    border: 1px solid var(--dcpro-borda);
+    padding: 10px 8px;
+    text-align: center;
+    vertical-align: middle;
+}
+        th {
+    background: linear-gradient(
+    135deg,
+    var(--dcpro-azul-principal),
+    var(--dcpro-azul-secundario)
+);
+    color: white;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 14px 10px;
+    letter-spacing: 0.02em;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+        input,
+select {
+    padding: 10px 12px;
+    text-align: center;
+    border: 1px solid var(--dcpro-borda);
+    border-radius: 12px;
+    box-sizing: border-box;
+    background: var(--dcpro-card);
+    transition: var(--transition);
+}
+input:focus,
+select:focus {
+    outline: none;
+    border-color: var(--dcpro-azul-secundario);
+    box-shadow: 0 0 0 4px rgba(59,130,246,.15);
+}
+        input[type="number"] {
+    width: 78px;
+}
+
+input[type="text"] {
+    width: 125px;
+    text-align: left;
+}
         select { width: 100%; text-align: left; font-weight: bold; color: #1e3a8a; }
         
-        .secao-veiculo { margin: 15px 0; padding: 12px; background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; }
-        .btn-add { background-color: #3b82f6; margin-bottom: 10px; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        .btn-add:hover { background-color: #2563eb; }
-        .btn-clear { background-color: #6b7280; margin-left: 8px; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        .btn-clear:hover { background-color: #4b5563; }
-        .btn-danger { background-color: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
-        .btn-danger:hover { background-color: #dc2626; }
-        
-        .btn-calc { background-color: #10b981; color: white; border: none; width: 100%; padding: 12px; font-size: 16px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; }
-        .btn-calc:hover { background-color: #059669; }
-        
-        .btn-pdf { background-color: #8b5cf6; color: white; border: none; width: 100%; padding: 12px; font-size: 16px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; display: none; }
-        .btn-pdf:hover { background-color: #7c3aed; }
-        .btn-excel { background-color: #2e7d32; color: white; border: none; width: 100%; padding: 12px; font-size: 16px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 10px; display: none; }
-        .btn-excel:hover { background-color: #1b5e20; }
+        .secao-veiculo {
+    margin: 18px 0 24px;
+    padding: 22px;
+    background: var(--dcpro-card);
+    border: 1px solid var(--dcpro-borda);
+    border-radius: 18px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
+.secao-veiculo label {
+    font-weight: 800 !important;
+    color: #334155 !important;
+    display: flex !important;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px !important;
+    font-size: 17px;
+    line-height: 1.35;
+}
+      .btn-add,
+.btn-clear,
+.btn-calc,
+.btn-pdf,
+.btn-excel,
+.btn-danger {
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-weight: 800;
+    border-radius: 12px;
+    transition: var(--transition);
+    box-shadow: var(--shadow-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-add:hover,
+.btn-clear:hover,
+.btn-calc:hover,
+.btn-pdf:hover,
+.btn-excel:hover,
+.btn-danger:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.22);
+}
+
+.btn-add {
+    background: linear-gradient(135deg, #3b82f6, var(--dcpro-azul-secundario));
+    padding: 11px 16px;
+    margin-bottom: 10px;
+}
+
+.btn-clear {
+    background: linear-gradient(135deg, #64748b, #475569);
+    padding: 11px 16px;
+    margin-left: 8px;
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    font-size: 16px;
+}
+
+.btn-calc,
+.btn-pdf,
+.btn-excel {
+    width: 100%;
+    padding: 13px 12px;
+    font-size: 16px;
+    font-weight: 700;
+    margin-top: 0;
+}
+
+.btn-calc {
+    background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.btn-pdf {
+    background: linear-gradient(135deg, var(--dcpro-roxo), var(--dcpro-roxo-escuro));
+    display: none;
+}
+
+.btn-excel {
+    background: linear-gradient(135deg, var(--dcpro-verde), #15803d);
+    display: none;
+}
         
         .resultados { margin-top: 20px; padding: 15px; background-color: #eff6ff; border-left: 5px solid #3b82f6; border-radius: 4px; }
         .alerta-veiculo { margin-top: 10px; padding: 12px; background-color: #fee2e2; border-left: 5px solid #ef4444; color: #991b1b; border-radius: 4px; font-weight: bold; display: none; line-height: 1.5; }
-        .sugestao-veiculo { margin-top: 10px; padding: 12px; background-color: #e0f2fe; border-left: 5px solid #0284c7; color: #0369a1; border-radius: 4px; font-weight: bold; display: none; line-height: 1.5; }
+        .sugestao-veiculo {
+    margin-top: 18px;
+    padding: 18px 20px;
+    background: linear-gradient(135deg, #eff6ff, #f8fbff);
+    border-left: 5px solid #2563eb;
+    color: #1e3a8a;
+    border-radius: 16px;
+    font-weight: 700;
+    display: none;
+    line-height: 1.6;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.10);
+}
         
-        .metric-container { margin-bottom: 12px; margin-top: 10px; }
-        .bar-bg { background-color: #e5e7eb; border-radius: 10px; height: 24px; width: 100%; overflow: hidden; margin-top: 5px; }
-        .bar-fill { height: 100%; width: 0%; transition: width 0.3s ease-in-out; text-align: right; padding-right: 10px; color: white; font-size: 12px; font-weight: bold; line-height: 24px; }
-        .fill-peso { background-color: #f59e0b; }
+        .metric-container{
+    margin:16px 0;
+}
+
+.bar-bg{
+    width:100%;
+    height:16px;
+    background:#e2e8f0;
+    border-radius:999px;
+    overflow:hidden;
+    box-shadow: inset 0 2px 5px rgba(15,23,42,.08);
+}
+
+.bar-fill{
+    height:100%;
+    width:0%;
+    border-radius:999px;
+    transition:width .6s ease;
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    padding-right:10px;
+    color:#fff;
+    font-size:11px;
+    font-weight:800;
+    letter-spacing:.02em;
+}
+
+.fill-peso{
+    background:linear-gradient(90deg,#22c55e,#16a34a);
+}
+
+.fill-volume{
+    background:linear-gradient(90deg,#3b82f6,#2563eb);
+}
         
-        .label-linha { font-size: 12px; font-weight: bold; display: inline-block; padding: 2px 6px; border-radius: 3px; color: white; }
+        .label-linha {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 54px;
+    padding: 7px 10px;
+    border-radius: 10px;
+    color: white;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.1;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.16);
+}
 
         .mapa-box { margin-top: 20px; padding: 15px; background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; }
-        .canvas-container { width: 100%; background: #ffffff; padding: 15px; border-radius: 6px; box-sizing: border-box; margin-bottom: 15px; border: 1px solid #cbd5e1; overflow-x: auto; }
+        .canvas-container {
+    width: 100%;
+    background: linear-gradient(135deg, #ffffff, #f8fafc);
+    padding: 18px;
+    border-radius: 18px;
+    box-sizing: border-box;
+    margin-bottom: 18px;
+    border: 1px solid var(--dcpro-borda);
+    overflow-x: auto;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
         .mapa-titulo { font-size: 13px; font-weight: bold; color: #1e3a8a; margin: 5px 0; }
         
         .dimensoes-bau-tag { display: inline-block; background-color: #1e3a8a; color: white; font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: bold; margin-bottom: 15px; }
         .dimensoes-bau-tag.estourou { background-color: #ef4444; animation: piscar 1.5s infinite; }
 
-        .legenda { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
-        .legenda-item { display: flex; align-items: center; font-size: 12px; font-weight: bold; }
-        .legenda-cor { width: 14px; height: 14px; margin-right: 5px; border-radius: 3px; border: 1px solid #444; }
+        .legenda {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
 
-        .nota-formal { margin-top: 20px; padding: 12px 15px; background-color: #f8fafc; border: 1px dashed #94a3b8; border-radius: 6px; color: #475569; font-size: 12px; line-height: 1.6; text-align: justify; }
-        .nota-formal strong { color: #1e3a8a; }
+.legenda-item{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
 
-        .selo-compatibilidade { margin: 12px 0; padding: 14px; border-radius: 8px; text-align: center; font-size: 20px; font-weight: bold; display: none; }
-        .selo-cabe { background: #dcfce7; color: #166534; border: 2px solid #22c55e; }
+    padding:8px 12px;
+    margin:6px;
+
+    background:#ffffff;
+
+    border:1px solid #dbe4ef;
+    border-radius:14px;
+
+    box-shadow:0 2px 8px rgba(0,0,0,.06);
+
+    font-size:13px;
+    font-weight:500;
+}
+
+.legenda-cor{
+    width:16px;
+    height:16px;
+
+    border-radius:4px;
+    border:1.2px solid #222;
+
+    flex-shrink:0;
+}
+
+.legenda-codigo {
+    color: #1e3a8a;
+}
+
+.legenda-nome {
+    color: #111827;
+}
+
+.legenda-qtd {
+    color: #047857;
+}
+
+.legenda-dim {
+    color: #64748b;
+}
+
+        .nota-formal {
+    margin-top: 24px;
+    padding: 18px 20px;
+    background: #f8fafc;
+    border: 1px solid var(--dcpro-borda);
+    border-left: 5px solid #2563eb;
+    border-radius: 16px;
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.75;
+    text-align: justify;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+.nota-formal strong {
+    color: #1e3a8a;
+    font-weight: 700;
+}
+
+        .selo-compatibilidade {
+    margin: 18px 0;
+    padding: 18px 20px;
+    border-radius: 18px;
+    text-align: center;
+    font-size: 17px;
+    font-weight: 800;
+    display: none;
+    box-shadow: 0 10px 24px rgba(22, 163, 74, 0.14);
+    letter-spacing: 0.02em;
+}
+
+.selo-cabe {
+    background: linear-gradient(135deg, #dcfce7, #f0fdf4);
+    color: #166534;
+    border: 1px solid #86efac;
+}
 
         @keyframes piscar {
             0% { opacity: 1; }
@@ -86,27 +479,173 @@
         border-top: 1px solid #ddd;
         background-color: #f9f9f9;
     }
+    
+    .acoes-relatorio {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.acoes-relatorio .btn-calc,
+.acoes-relatorio .btn-pdf,
+.acoes-relatorio .btn-excel {
+    width: 100%;
+    margin-top: 0;
+    padding: 12px 10px;
+    font-size: 14px;
+}
+    
+    .acoes-relatorio button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+    
+    .acoes-relatorio button i {
+    font-size: 18px;
+}
+
+.acoes-relatorio button span {
+    font-size: 14px;
+    font-weight: 600;
+}
+    
+    .table-responsive table {
+    flex-shrink: 0;
+}
+    
+    /* =======================================================
+   RESPONSIVIDADE - V1.2.1
+======================================================= */
+
+@media (max-width: 900px) {
+
+    body {
+        margin: 10px;
+        font-size: 13px;
+    }
+
+    .container {
+        padding: 16px;
+        border-radius: 16px;
+    }
+
+    .hero-header {
+        padding: 18px;
+        border-radius: 16px;
+    }
+
+    .hero-header h1 {
+        font-size: 30px;
+    }
+
+    .hero-header p {
+        font-size: 15px;
+    }
+
+    .secao-veiculo {
+        padding: 16px;
+        border-radius: 16px;
+    }
+
+    .secao-veiculo label {
+        font-size: 15px;
+    }
+
+    .btn-add,
+    .btn-clear {
+        width: 100%;
+        min-height: 52px;
+        margin: 0 0 10px 0;
+        font-size: 15px;
+    }
+
+    .acoes-relatorio {
+        grid-template-columns: 1fr;
+    }
+
+    .btn-calc,
+    .btn-pdf,
+    .btn-excel {
+        min-height: 56px;
+        font-size: 16px;
+        border-radius: 14px;
+    }
+
+    .table-responsive {
+        margin-top: 12px;
+        border-radius: 14px;
+    }
+
+    table {
+        min-width: 980px;
+    }
+}
+    
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>🚚 Dimensionador de Carga Pro</h1>
-    <p style="margin-top:0; color:#666;">Dimensionador de Carga Pro</p>
+  
+    <div class="hero-header">
+
+    <div>
+        
+        <h1>DCPRO</h1>
+        <p>Planejamento, cubagem, frota e layout visual da carga em um só lugar.</p>
+    </div>
+</div>
 
     <div class="secao-veiculo">
-        <label style="font-weight: bold; color: #334155; display: block; margin-bottom: 5px;">🚚 Veículo Pretendido para Contratação / Disponível:</label>
-        <select id="select-veiculo" onchange="calcularCarga();">
-            <option value="0">Urbanos / Vans (Cap: 650 kg | C: 1.80m x L: 1.30m x A: 1.20m)</option>
-            <option value="1">VUC / 3/4 (Cap: 3.500 kg | C: 4.50m x L: 2.20m x A: 2.20m)</option>
-            <option value="2">Caminhão Toco (Cap: 6.000 kg | C: 6.50m x L: 2.40m x A: 2.50m)</option>
-            <option value="3" selected>Caminhão Truck (Cap: 14.000 kg | C: 8.50m x L: 2.40m x A Máx Carga: 2.60m)</option>
-            <option value="4">Carreta 3 Eixos (Cap: 25.000 kg | C: 13.50m x L: 2.45m x A Máx Rodagem ANTT: 3.00m)</option>
-        </select>
+        <label>🚚 Veículo Pretendido para Contratação / Disponível:</label>
+        <select id="select-veiculo">
+    <option value="0">Fiorino (Cap: 650 kg | C: 1.70m x L: 1.05m x A: 1.34m)</option>
+    <option value="1">Urbanos / Vans (Cap: 1.450 kg | C: 2.60m x L: 1.35m x A: 1.70m)</option>
+    <option value="2">VUC / 3/4 (Cap: 3.500 kg | C: 4.50m x L: 2.20m x A: 2.20m)</option>
+    <option value="3">Caminhão Toco (Cap: 6.000 kg | C: 6.50m x L: 2.40m x A: 2.50m)</option>
+    <option value="4" selected>Caminhão Truck (Cap: 14.000 kg | C: 8.50m x L: 2.40m x A Máx. Carga: 2.60m)</option>
+    <option value="5">Carreta 3 Eixos (Cap: 25.000 kg | C: 13.50m x L: 2.45m x A Máx. Rodagem ANTT: 3.00m)</option>
+    <option value="personalizado">Veículo Personalizado</option>
+</select>
+        
+        <div id="bloco-veiculo-personalizado" style="display:none; margin-top:14px;">
+    <div style="
+        background:#f8fafc;
+        border:1px solid #dbe3ef;
+        border-radius:14px;
+        padding:14px;
+    ">
+        <strong style="color:#1e3a8a;">🚚 Dados do Veículo Personalizado</strong>
+        
+        <p style="margin:8px 0 0; color:#475569; font-size:12px; line-height:1.5;">
+    💡 Informe as dimensões internas úteis do compartimento de carga e a capacidade máxima de peso do veículo.
+    O layout visual da carga será gerado automaticamente com essas medidas.
+</p>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px;">
+            <input id="vp-nome" type="text" placeholder="Nome do veículo">
+            <input id="vp-peso" type="number" placeholder="Peso">
+
+           <input id="vp-comp" type="number" placeholder="Comp">
+<input id="vp-larg" type="number" placeholder="Larg">
+<input id="vp-alt" type="number" placeholder="Alt">
+        </div>
+    </div>
+</div>
+        
     </div>
 
-    <button class="btn-add" onclick="adicionarLinha()">+ Adicionar Item</button>
-    <button class="btn-clear" onclick="limparTudo()">🗑 Limpar Tudo</button>
+    <button class="btn-add" onclick="adicionarLinha()">
+    <i class="fa-solid fa-plus"></i>
+    <span>Adicionar Item</span>
+</button>
+    <button class="btn-clear" onclick="limparTudo()">
+    <i class="fa-solid fa-trash"></i>
+    <span>Limpar Tudo</span>
+</button>
 
     <div class="table-responsive">
         <div id="avisoItensIncompletos" style="display:none;background:#fff3cd;border:1px solid #ffda6a;color:#664d03;padding:12px;margin:10px 0;border-radius:6px;font-weight:bold;">
@@ -115,14 +654,14 @@
         <table id="tabela-carga">
             <thead>
                 <tr>
-                    <th>Ref / Cor</th>
-                    <th>Identificação / Tipo</th>
-                    <th>Qtd</th>
-                    <th>Comprimento (cm)</th>
-                    <th>Largura (cm)</th>
-                    <th>Altura (cm)</th>
-                    <th>Peso Unit. (kg)</th>
-                    <th>Ação</th>
+                    <th><i class="fa-solid fa-palette"></i> Ref / Cor</th>
+                    <th><i class="fa-solid fa-box"></i> Identificação / Tipo</th>
+                    <th><i class="fa-solid fa-hashtag"></i> Qtd</th>
+                    <th><i class="fa-solid fa-ruler-horizontal"></i> Comprimento (cm)</th>
+                    <th><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Largura (cm)</th>
+                    <th><i class="fa-solid fa-arrow-up"></i> Altura (cm)</th>
+                    <th><i class="fa-solid fa-weight-hanging"></i> Peso Unit. (kg)</th>
+                    <th><i class="fa-solid fa-gear"></i> Ação</th>
                 </tr>
             </thead>
             <tbody>
@@ -131,15 +670,38 @@
     </div>
 
     <br>
-    <button class="btn-calc" onclick="calcularCarga()">Calcular</button>
-    <button class="btn-pdf" id="btn-gerar-pdf" onclick="gerarRelatorioPDF()">💾 Gerar Relatório PDF</button>
-    <button class="btn-excel" id="btn-excel" onclick="exportarExcel()">📊 Exportar para Excel</button>
+<div class="acoes-relatorio">
+    <button class="btn-calc" onclick="calcularCarga()">
+        <i class="fa-solid fa-calculator"></i>
+        <span>Calcular</span>
+    </button>
+
+    <button class="btn-pdf" id="btn-gerar-pdf" onclick="gerarRelatorioPDF()">
+        <i class="fa-solid fa-file-pdf"></i>
+        <span>PDF</span>
+    </button>
+
+    <button class="btn-excel" id="btn-excel" onclick="exportarExcel()">
+        <i class="fa-solid fa-file-excel"></i>
+        <span>Excel</span>
+    </button>
+</div>
 
     <div class="alerta-veiculo" id="alerta-frota"></div>
     <div class="sugestao-veiculo" id="sugestao-frota"></div>
     <div id="selo-compatibilidade" class="selo-compatibilidade"></div>
 
     <div class="resultados" id="bloco-resultados" style="display: none;">
+        <div class="titulo-resultados">
+    <h2>
+        <i class="fas fa-chart-line"></i>
+        Resultado da Análise
+    </h2>
+
+    <p>
+        Planejamento automático da carga e validação da compatibilidade logística.
+    </p>
+</div>
         <h2>Análise de Ocupação do Veículo Selecionado</h2>
         <div class="metric-container">
             <label><strong>Capacidade de Peso Ocupado:</strong> <span id="txt-peso">0</span> kg de <span id="max-peso">0</span> kg</label>
@@ -152,10 +714,10 @@
     </div>
 
     <div class="mapa-box" id="bloco-mapa" style="display: none;">
-        <h2>Disposição Física da Carga no Espaço de Rodagem</h2>
-        <div class="mapa-titulo">1. Arrumação Otimizada no Assoalho (Vista de Cima - Com Indicação Dinâmica de Medidas Internas)</div>
+        <h2>📦 Planejamento da Carga</h2>
+        <div class="mapa-titulo">Distribuição otimizada da carga no espaço útil do veículo.</div>
         
-        <div id="dimesoes-bau-texto" class="dimensoes-bau-tag">Dimensões Internas Disponíveis: -</div>
+        <div id="dimesoes-bau-texto" class="dimensoes-bau-tag">📐 Dimensões Internas do Veículo -</div>
 
        <div id="container-veiculos"></div>
         <div id="resumo-excedente" style="display:none;margin-top:12px;padding:12px;background:#fee2e2;border-left:5px solid #dc2626;border-radius:4px;"></div>
@@ -168,12 +730,61 @@
 
 <script>
     const dbVeiculos = [
-        { nome: "Urbanos / Vans", pesoMax: 650, volMax: 4.5, compFisico: 1.80, largFisica: 1.30, altFisica: 1.20 },
-        { nome: "VUC / 3/4", pesoMax: 3500, volMax: 18, compFisico: 4.50, largFisica: 2.20, altFisica: 2.20 },
-        { nome: "Caminhão Toco", pesoMax: 6000, volMax: 32, compFisico: 6.50, largFisica: 2.40, altFisica: 2.50 },
-        { nome: "Caminhão Truck", pesoMax: 14000, volMax: 50, compFisico: 8.50, largFisica: 2.40, altFisica: 2.60 },
-        { nome: "Carreta 3 Eixos", pesoMax: 25000, volMax: 90, compFisico: 13.50, largFisica: 2.45, altFisica: 3.00 }
-    ];
+
+    {
+    nome: "Fiorino",
+    pesoMax: 650,
+    volMax: 1.70 * 1.05 * 1.34,
+    compFisico: 1.70,
+    largFisica: 1.05,
+    altFisica: 1.34
+},
+{
+    nome: "Urbanos / Vans",
+    pesoMax: 1500,
+    volMax: 2.60 * 1.35 * 1.70,
+    compFisico: 2.60,
+    largFisica: 1.35,
+    altFisica: 1.70
+},
+
+    {
+        nome: "VUC / 3/4",
+        pesoMax: 3500,
+        volMax: 18,
+        compFisico: 4.50,
+        largFisica: 2.20,
+        altFisica: 2.20
+    },
+
+    {
+        nome: "Caminhão Toco",
+        pesoMax: 6000,
+        volMax: 39,
+        compFisico: 6.50,
+        largFisica: 2.40,
+        altFisica: 2.50
+    },
+
+    {
+        nome: "Caminhão Truck",
+        pesoMax: 14000,
+        volMax: 53,
+        compFisico: 8.50,
+        largFisica: 2.40,
+        altFisica: 2.60
+    },
+
+    {
+        nome: "Carreta 3 Eixos",
+        pesoMax: 25000,
+        volMax: 99,
+        compFisico: 13.50,
+        largFisica: 2.45,
+        altFisica: 3.00
+    }
+
+];
 
     const coresItens = [
         "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316", 
@@ -222,7 +833,7 @@
         <td><input type="text" class="larg" placeholder="CM" oninput="validarNumeros(this)"></td>
         <td><input type="text" class="alt" placeholder="CM" oninput="validarNumeros(this)"></td>
         <td><input type="text" class="peso" placeholder="KG" oninput="validarNumeros(this)"></td>
-        <td><button class="btn-danger" onclick="deletarLinha(this)">X</button></td>
+        <td>     <button class="btn-danger" onclick="deletarLinha(this)" title="Excluir item">         <i class="fa-solid fa-xmark"></i>     </button> </td>
     `;
 
     novaLinha.querySelectorAll("input").forEach(input => {
@@ -236,10 +847,12 @@
     }
 }
     function deletarLinha(botao) {
-        botao.parentNode.parentNode.remove();
-        atualizarLabelsEcores();
-        calcularCarga();
-    }
+    botao.parentNode.parentNode.remove();
+
+    atualizarLabelsEcores();
+    calcularCarga();
+    salvarCarga();
+}
 
     function verificarItensIncompletos(){
         let incompleto = false;
@@ -581,9 +1194,13 @@ function testarArrumacaoFisica(veiculo, itens) {
 
 }
 
-function planejarFrota(listaCarga) {
+function planejarFrota(listaCarga, veiculoSelecionado = null) {
 
     const frota = [];
+    const veiculoPersonalizado =
+        veiculoSelecionado && veiculoSelecionado.personalizado
+            ? veiculoSelecionado
+            : null;
 
     listaCarga.forEach(item => {
 
@@ -595,7 +1212,6 @@ function planejarFrota(listaCarga) {
         for (const viagem of frota) {
 
             const itensTeste = [...viagem.itens, item];
-
             const novoPeso = viagem.pesoAtual + pesoItem;
             const novoVolume = viagem.volumeAtual + volumeItem;
 
@@ -609,14 +1225,23 @@ function planejarFrota(listaCarga) {
                 maiorAlt = Math.max(maiorAlt, i.alt);
             });
 
-            let veiculoTeste =
-                escolherVeiculoIdeal(
-                    novoPeso,
-                    novoVolume,
-                    maiorComp,
-                    maiorLarg,
-                    maiorAlt
-                );
+            if (
+                viagem.veiculo.personalizado &&
+                novoPeso <= viagem.veiculo.pesoMax &&
+                novoVolume <= viagem.veiculo.volMax &&
+                testarArrumacaoFisica(viagem.veiculo, itensTeste)
+            ) {
+                viagemEncontrada = viagem;
+                break;
+            }
+
+            let veiculoTeste = escolherVeiculoIdeal(
+                novoPeso,
+                novoVolume,
+                maiorComp,
+                maiorLarg,
+                maiorAlt
+            );
 
             let indiceVeiculo =
                 dbVeiculos.findIndex(v => v.nome === veiculoTeste.nome);
@@ -626,25 +1251,31 @@ function planejarFrota(listaCarga) {
                 const veiculoAtual = dbVeiculos[indiceVeiculo];
 
                 if (testarArrumacaoFisica(veiculoAtual, itensTeste)) {
-
                     viagem.veiculo = veiculoAtual;
                     viagemEncontrada = viagem;
                     break;
-
                 }
 
                 indiceVeiculo++;
-
             }
 
             if (viagemEncontrada) break;
-
         }
 
         if (!viagemEncontrada) {
 
-            const veiculoInicial =
-                escolherVeiculoIdeal(
+            let veiculoFinal = null;
+
+            if (
+                veiculoPersonalizado &&
+                pesoItem <= veiculoPersonalizado.pesoMax &&
+                volumeItem <= veiculoPersonalizado.volMax &&
+                testarArrumacaoFisica(veiculoPersonalizado, [item])
+            ) {
+                veiculoFinal = veiculoPersonalizado;
+            } else {
+
+                const veiculoInicial = escolherVeiculoIdeal(
                     pesoItem,
                     volumeItem,
                     item.comp,
@@ -652,34 +1283,30 @@ function planejarFrota(listaCarga) {
                     item.alt
                 );
 
-            let indiceVeiculo =
-                dbVeiculos.findIndex(v => v.nome === veiculoInicial.nome);
+                let indiceVeiculo =
+                    dbVeiculos.findIndex(v => v.nome === veiculoInicial.nome);
 
-            let veiculoFinal = dbVeiculos[indiceVeiculo];
+                veiculoFinal = dbVeiculos[indiceVeiculo];
 
-            while (indiceVeiculo < dbVeiculos.length) {
+                while (indiceVeiculo < dbVeiculos.length) {
 
-                if (testarArrumacaoFisica(dbVeiculos[indiceVeiculo], [item])) {
-                    veiculoFinal = dbVeiculos[indiceVeiculo];
-                    break;
+                    if (testarArrumacaoFisica(dbVeiculos[indiceVeiculo], [item])) {
+                        veiculoFinal = dbVeiculos[indiceVeiculo];
+                        break;
+                    }
+
+                    indiceVeiculo++;
                 }
-
-                indiceVeiculo++;
-
             }
 
             viagemEncontrada = criarViagem(veiculoFinal);
             frota.push(viagemEncontrada);
-
         }
 
         viagemEncontrada.itens.push(item);
-
         viagemEncontrada.pesoAtual += pesoItem;
         viagemEncontrada.volumeAtual += volumeItem;
-
-        viagemEncontrada.areaAtual +=
-            item.comp * item.larg * item.qtd;
+        viagemEncontrada.areaAtual += item.comp * item.larg * item.qtd;
 
         viagemEncontrada.maiorComprimento =
             Math.max(viagemEncontrada.maiorComprimento, item.comp);
@@ -689,11 +1316,9 @@ function planejarFrota(listaCarga) {
 
         viagemEncontrada.maiorAltura =
             Math.max(viagemEncontrada.maiorAltura, item.alt);
-
     });
 
     return frota;
-
 }
 
 function distribuirCargaEmVeiculos(listaCarga) {
@@ -847,8 +1472,42 @@ function distribuirCargaEmVeiculos(listaCarga) {
     let listaCarga = [];
     let maiorCompItem = 0, maiorLargItem = 0, maiorAltItem = 0;
 
-    const indexSel = parseInt(document.getElementById("select-veiculo").value);
-    const vSelecionado = dbVeiculos[indexSel];
+    const valorSelectVeiculo = document.getElementById("select-veiculo").value;
+let indexSel = parseInt(valorSelectVeiculo);
+let vSelecionado;
+
+if (valorSelectVeiculo === "personalizado") {
+    const nomePersonalizado = document.getElementById("vp-nome").value.trim();
+    const pesoPersonalizado = parseFloat(document.getElementById("vp-peso").value);
+    const compPersonalizado = parseFloat(document.getElementById("vp-comp").value) / 100;
+const largPersonalizado = parseFloat(document.getElementById("vp-larg").value) / 100;
+const altPersonalizado = parseFloat(document.getElementById("vp-alt").value) / 100;
+
+    if (
+        !nomePersonalizado ||
+        !pesoPersonalizado ||
+        !compPersonalizado ||
+        !largPersonalizado ||
+        !altPersonalizado
+    ) {
+        alert("Preencha todos os dados do veículo personalizado.");
+        return;
+    }
+
+    vSelecionado = {
+        nome: nomePersonalizado,
+        pesoMax: pesoPersonalizado,
+        compFisico: compPersonalizado,
+        largFisica: largPersonalizado,
+        altFisica: altPersonalizado,
+        volMax: compPersonalizado * largPersonalizado * altPersonalizado,
+        personalizado: true
+    };
+
+    indexSel = -1;
+} else {
+    vSelecionado = dbVeiculos[indexSel];
+}
     
     // DEBUG: Cole isso logo após o vSelecionado ser definido
 console.log("Veículo Selecionado:", vSelecionado);
@@ -913,7 +1572,7 @@ if (listaCarga.length > 0) {
     const container = document.getElementById("container-veiculos");
     container.innerHTML = "";
 
-    const cargas = planejarFrota(listaCarga);
+    const cargas = planejarFrota(listaCarga, vSelecionado);
 
     veiculoCalculado = cargas.reduce((maior, carga) => {
 
@@ -937,6 +1596,7 @@ volMaxCalculado =
 
 if (
     indiceVeiculoCalculado !== indexSel &&
+    indiceVeiculoCalculado !== -1 &&
     !trocaAutomaticaVeiculo
 ) {
 
@@ -948,15 +1608,17 @@ if (
     trocaAutomaticaVeiculo = true;
 
     document.getElementById("select-veiculo").value =
-        indiceVeiculoCalculado;
+    indiceVeiculoCalculado;
 
-    calcularCarga();
+verificarVeiculoPersonalizado();
 
-    return;
+calcularCarga();
+
+return;
 
 }
 
-trocaAutomaticaVeiculo = false;
+trocaAutomaticaVeiculo = false; 
 
 cargas.forEach((carga, indice) => {
 
@@ -990,49 +1652,56 @@ const areaVeiculo =
 
         document.getElementById(`titulo-veiculo-${numero}`).innerHTML = `
 <div style="
-    background:#f8fafc;
-    border:1px solid #cbd5e1;
-    border-radius:10px;
-    padding:14px 18px;
-    margin-bottom:14px;
+    background: linear-gradient(135deg, #ffffff, #f8fbff);
+    border: 1px solid #dbeafe;
+    border-radius: 18px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
 ">
 
     <div style="
-        font-size:24px;
-font-weight:700;
-color:#1e3a8a;
-        margin-bottom:12px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 26px;
+        font-weight: 800;
+        color: #1e3a8a;
+        margin-bottom: 16px;
     ">
-        🚚 ${carga.veiculo.nome}
+        <span style="font-size: 30px;">🚚</span>
+        <span>${carga.veiculo.nome}</span>
     </div>
 
-   <div style="
-    display:grid;
-    grid-template-columns:130px auto;
-    row-gap:6px;
-    font-size:14px;
-    color:#475569;
-">
+    <div style="
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        row-gap: 10px;
+        column-gap: 14px;
+        font-size: 15px;
+        color: #475569;
+        align-items: center;
+    ">
 
-    <div>⚖️ <strong>Peso</strong></div>
-<div>
-    <strong>${formatarBR(pesoVeiculo)}</strong> /
-    ${formatarBR(carga.veiculo.pesoMax)} kg
-</div>
+        <div style="font-weight:800;">⚖️ Peso</div>
+        <div>
+            <strong style="color:#1e3a8a;">${formatarBR(pesoVeiculo)}</strong>
+            <span style="color:#64748b;">/ ${formatarBR(carga.veiculo.pesoMax)} kg</span>
+        </div>
 
-<div>📦 <strong>Volume</strong></div>
-<div>
-    <strong>${formatarBR(volumeVeiculo)}</strong> /
-    ${formatarBR(volMaxVeiculo)} m³
-</div>
+        <div style="font-weight:800;">📦 Volume</div>
+        <div>
+            <strong style="color:#1e3a8a;">${formatarBR(volumeVeiculo)}</strong>
+            <span style="color:#64748b;">/ ${formatarBR(volMaxVeiculo)} m³</span>
+        </div>
 
-<div>📐 <strong>Área útil</strong></div>
-<div>
-    <strong>${formatarBR(areaVeiculo)}</strong> /
-    ${formatarBR(areaMaxVeiculo)} m²
-</div>
+        <div style="font-weight:800;">📐 Área útil</div>
+        <div>
+            <strong style="color:#1e3a8a;">${formatarBR(areaVeiculo)}</strong>
+            <span style="color:#64748b;">/ ${formatarBR(areaMaxVeiculo)} m²</span>
+        </div>
 
-</div>
+    </div>
 
 </div>
 `;
@@ -1166,7 +1835,7 @@ for (let i = indexSel + 1; i < dbVeiculos.length; i++) {
 
     selo.style.display = "block";
     selo.className = "selo-compatibilidade selo-cabe";
-    selo.innerHTML = "STATUS: CARGA APROVADA";
+    selo.innerHTML = `     <i class="fa-solid fa-circle-check"></i>     <span>CARGA APROVADA</span> `;
     btnPdf.style.display = "block";
     btnExcel.style.display = "block";
 }
@@ -1251,7 +1920,7 @@ function criarMapaVeiculo(numero) {
 </h3>
 
     <div id="resumo-veiculo-${numero}" class="resultados" style="display:block;margin-bottom:12px;">
-        <strong>Resumo de Ocupação</strong>
+        <i class="fas fa-chart-pie"></i> Resumo de Ocupação
 
         <div class="metric-container">
             <label>
@@ -1277,7 +1946,7 @@ function criarMapaVeiculo(numero) {
     </div>
 
     <div id="dimesoes-${numero}" class="dimensoes-bau-tag">
-        Dimensões Internas Disponíveis: -
+        📐 Dimensões Internas do Veículo -
     </div>
 
     <div class="canvas-container">
@@ -1316,26 +1985,38 @@ document.getElementById(dimensaoID);
         globalEstorouMetragem = false;
         globalItensExcedentes = [];
 
-        const larguraMaximaCanvasGeral = 750;
-        const alturaCanvasGeral = 220;
-        const margemBorda = 10;
-        const comprimentoMaximoReferencia = 13.50; 
-        const larguraMaximaReferencia = 2.45;
+        const larguraMaximaCanvasGeral = 900;
+const alturaCanvasGeral = 280;
+const margemBorda = 14;
 
-        const escalaGlobalX = (larguraMaximaCanvasGeral - (margemBorda * 2)) / comprimentoMaximoReferencia;
-        const escalaGlobalY = (alturaCanvasGeral - (margemBorda * 2)) / larguraMaximaReferencia;
+const comprimentoReferenciaVisual = 13.50;
+const larguraReferenciaVisual = 2.45;
 
+const escalaGlobalX =
+    (larguraMaximaCanvasGeral - (margemBorda * 2)) / comprimentoReferenciaVisual;
+
+const escalaGlobalY =
+    (alturaCanvasGeral - (margemBorda * 2)) / larguraReferenciaVisual;
+    
         let larguraBauPixels = veiculo.compFisico * escalaGlobalX;
         let alturaBauPixels = veiculo.largFisica * escalaGlobalY;
 
         let caixasIndividuais = [];
         itens.forEach(item => {
             legendaContainer.innerHTML += `
-                <div class="legenda-item">
-                    <div class="legenda-cor" style="background-color: ${item.cor};"></div>
-                    <span>[Item ${item.id}] ${item.nome} (${item.qtd}x) - ${item.comp.toFixed(2)}m x ${item.larg.toFixed(2)}m</span>
-                </div>
-            `;
+    <div class="legenda-item">
+        <div class="legenda-cor" style="background-color: ${item.cor};"></div>
+        <span>
+            <strong>Item ${item.id}</strong>
+            &nbsp;
+            <b>${item.nome}</b>
+            &nbsp;
+            ${item.qtd}x
+            &nbsp;•&nbsp;
+            ${item.comp.toFixed(2)}m × ${item.larg.toFixed(2)}m
+        </span>
+    </div>
+`;
 
             const nomeMinusculo = item.nome.toLowerCase();
             let ehPalletOuBase = nomeMinusculo.includes("pallet") || nomeMinusculo.includes("palete") || nomeMinusculo.includes("base");
@@ -1453,9 +2134,13 @@ document.getElementById(dimensaoID);
             }
         });
 
-        let tamanhoFinalW = Math.max(larguraBauPixels + (margemBorda * 2), 750);
-        svgCima.setAttribute("width", tamanhoFinalW);
-        svgCima.setAttribute("height", alturaBauPixels + (margemBorda * 2));
+        let tamanhoFinalW = Math.max(larguraBauPixels + (margemBorda * 2), 900);
+
+const offsetX = (tamanhoFinalW - larguraBauPixels) / 2;
+const offsetY = margemBorda;
+
+svgCima.setAttribute("width", tamanhoFinalW);
+svgCima.setAttribute("height", alturaBauPixels + (margemBorda * 2));
 
         if (globalEstorouMetragem) {
             txtDimensoes.className = "dimensoes-bau-tag estourou";
@@ -1466,21 +2151,28 @@ document.getElementById(dimensaoID);
         }
 
         let bgRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        bgRect.setAttribute("x", margemBorda);
-        bgRect.setAttribute("y", margemBorda);
-        bgRect.setAttribute("width", larguraBauPixels);
-        bgRect.setAttribute("height", alturaBauPixels);
-        bgRect.setAttribute("fill", globalEstorouMetragem ? "#fff5f5" : "#f8fafc");
-        bgRect.setAttribute("stroke", globalEstorouMetragem ? "#ef4444" : "#1e3a8a");
-        bgRect.setAttribute("stroke-width", "2.5");
-        if (globalEstorouMetragem) bgRect.setAttribute("stroke-dasharray", "8,4");
-        svgCima.appendChild(bgRect);
+bgRect.setAttribute("x", offsetX);
+bgRect.setAttribute("y", offsetY);
+bgRect.setAttribute("width", larguraBauPixels);
+bgRect.setAttribute("height", alturaBauPixels);
+bgRect.setAttribute("rx", "8");
+bgRect.setAttribute("ry", "8");
+bgRect.setAttribute("fill", globalEstorouMetragem ? "#fff5f5" : "#f8fafc");
+bgRect.setAttribute("stroke", globalEstorouMetragem ? "#ef4444" : "#1e40af");
+bgRect.setAttribute("stroke-width", "3");
+bgRect.setAttribute("filter", "drop-shadow(0px 4px 6px rgba(15,23,42,0.18))");
+
+if (globalEstorouMetragem) {
+    bgRect.setAttribute("stroke-dasharray", "8,4");
+}
+
+svgCima.appendChild(bgRect);
 
         caixasPosicionadas.forEach(c => {
-            let posX = margemBorda + (c.X_Fisico * escalaGlobalX);
-            let posY = margemBorda + (c.Y_Fisico * escalaGlobalY);
-            let widthPX = c.compRender * escalaGlobalX;
-            let heightPX = c.largRender * escalaGlobalY;
+            let posX = offsetX + (c.X_Fisico * escalaGlobalX);
+let posY = offsetY + (c.Y_Fisico * escalaGlobalY);
+let widthPX = c.compRender * escalaGlobalX;
+let heightPX = c.largRender * escalaGlobalY;
 
             let rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
             rect.setAttribute("x", posX);
@@ -1488,8 +2180,8 @@ document.getElementById(dimensaoID);
             rect.setAttribute("width", widthPX);
             rect.setAttribute("height", heightPX);
             rect.setAttribute("fill", c.cor);
-            rect.setAttribute("stroke", "#ffffff");
-            rect.setAttribute("stroke-width", "1.5");
+            rect.setAttribute("stroke", "#1f2937");
+rect.setAttribute("stroke-width", "1.0");
             
             if (c.X_Fisico + c.compRender > veiculo.compFisico) {
                 rect.setAttribute("stroke", "#dc2626");
@@ -1534,17 +2226,7 @@ document.getElementById(dimensaoID);
                 }
 
                 if (c.empilhados > 1) {
-                    let sombreado = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-                    sombreado.setAttribute("x", posX + 3);
-                    sombreado.setAttribute("y", posY + 3);
-                    sombreado.setAttribute("width", widthPX - 6);
-                    sombreado.setAttribute("height", heightPX - 6);
-                    sombreado.setAttribute("fill", "none");
-                    sombreado.setAttribute("stroke", "rgba(0,0,0,0.2)");
-                    sombreado.setAttribute("stroke-width", "1.5");
-                    sombreado.setAttribute("stroke-dasharray", "3,2");
-                    svgCima.appendChild(sombreado);
-
+                    
                     let textoQtd = document.createElementNS("http://www.w3.org/2000/svg", "text");
                     textoQtd.setAttribute("x", posX + (widthPX / 2));
                     textoQtd.setAttribute("y", posY + (heightPX / 2) + 7);
@@ -2154,7 +2836,7 @@ async function gerarRelatorioPDF() {
     // RODAPÉ
     doc.setFontSize(8);
     doc.setTextColor(120);
-    doc.text("DCPRO V1.0 BETA - Relatório gerado automaticamente.", 105, 285, { align: "center" });
+    doc.text("DCPRO - Relatório gerado automaticamente.", 105, 285, { align: "center" });
 
     doc.save("Relatorio_" + codigoSimulacao + ".pdf");
 }
@@ -2243,8 +2925,67 @@ function carregarCargaSalva() {
 
     atualizarLabelsEcores();
 }
-    window.onload = function() {
+
+function verificarVeiculoPersonalizado() {
+    const select = document.getElementById("select-veiculo");
+    const bloco = document.getElementById("bloco-veiculo-personalizado");
+
+    if (!select || !bloco) return;
+
+    if (select.value === "personalizado") {
+        bloco.style.display = "block";
+    } else {
+        bloco.style.display = "none";
+    }
+}
+
+function salvarVeiculoPersonalizado() {
+    const dados = {
+        select: document.getElementById("select-veiculo").value,
+        nome: document.getElementById("vp-nome")?.value || "",
+        peso: document.getElementById("vp-peso")?.value || "",
+        comp: document.getElementById("vp-comp")?.value || "",
+        larg: document.getElementById("vp-larg")?.value || "",
+        alt: document.getElementById("vp-alt")?.value || ""
+    };
+
+    localStorage.setItem("dcpro_veiculo_personalizado", JSON.stringify(dados));
+}
+
+function carregarVeiculoPersonalizado() {
+    const salvo = localStorage.getItem("dcpro_veiculo_personalizado");
+    if (!salvo) return;
+
+    const dados = JSON.parse(salvo);
+
+    document.getElementById("select-veiculo").value = dados.select || "4";
+    document.getElementById("vp-nome").value = dados.nome || "";
+    document.getElementById("vp-peso").value = dados.peso || "";
+    document.getElementById("vp-comp").value = dados.comp || "";
+    document.getElementById("vp-larg").value = dados.larg || "";
+    document.getElementById("vp-alt").value = dados.alt || "";
+
+    verificarVeiculoPersonalizado();
+}
+
+    window.onload = function () {
     carregarCargaSalva();
+    carregarVeiculoPersonalizado();
+
+    if (document.querySelectorAll("#tabela-carga tbody tr").length === 0) {
+        adicionarLinha();
+    }
+
+    document.getElementById("select-veiculo").addEventListener("change", function () {
+        verificarVeiculoPersonalizado();
+        salvarVeiculoPersonalizado();
+    });
+
+    ["vp-nome", "vp-peso", "vp-comp", "vp-larg", "vp-alt"].forEach(id => {
+        document.getElementById(id)?.addEventListener("input", salvarVeiculoPersonalizado);
+    });
+
+    verificarVeiculoPersonalizado();
 };
     
 </script>
