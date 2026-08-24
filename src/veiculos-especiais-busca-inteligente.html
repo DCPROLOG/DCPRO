@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Veículos Especiais | DCPRO</title>
+
+  <link rel="icon" type="image/png" href="../assets/img/favicon.png" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="stylesheet" href="../assets/css/guia.css" />
+
+  
+</head>
+
+<body>
+  <div class="container">
+   <header class="guia-hero">
+ <img
+  src="../assets/logo/logo-guia-operacional.png"
+  alt="Guia Operacional DCPRO"
+  class="guia-logo"
+/>
+
+  <h1 class="titulo-seo">Guia Operacional DCPRO</h1>
+
+  <p>
+  Centro de consulta técnica para operações especiais de transporte de cargas,
+  veículos especiais, aplicações e conceitos operacionais.
+</p>
+
+</header>
+    
+    <section class="biblioteca-busca">
+  <label for="campo-busca-biblioteca">
+    🔍 Pesquisar veículo, carga ou aplicação
+  </label>
+
+  <input
+    type="text"
+    id="campo-busca-biblioteca"
+    placeholder="Pesquise veículos, conceitos operacionais e aplicações."
+    oninput="filtrarBiblioteca()"
+  />
+
+  <p id="resultado-busca-biblioteca">
+    Pesquise veículos, conceitos operacionais e aplicações.
+  </p>
+</section>
+   
+   <div class="filtros-biblioteca">
+
+    <button class="btn-filtro ativo" onclick="filtrarCategoria('todos', this)">
+        Todos
+    </button>
+
+    <button class="btn-filtro" onclick="filtrarCategoria('maquinas', this)">
+        🚜 Máquinas
+    </button>
+
+    <button class="btn-filtro" onclick="filtrarCategoria('longas', this)">
+        📏 Cargas Longas
+    </button>
+
+    <button class="btn-filtro" onclick="filtrarCategoria('superpesadas', this)">
+        ⚖️ Superpesadas
+    </button>
+
+    <button class="btn-filtro" onclick="filtrarCategoria('portuario', this)">
+        🚢 Portuário
+    </button>
+
+    <button class="btn-filtro" onclick="filtrarCategoria('agricola', this)">
+        🌾 Agrícola
+    </button>
+
+</div>
+   
+   <div class="modo-guia">
+  <button class="btn-modo ativo" onclick="mostrarModoGuia('todos', this)">
+    📚 Mostrar tudo
+  </button>
+
+  <button class="btn-modo" onclick="mostrarModoGuia('conceitos', this)">
+    📘 Conceitos
+  </button>
+
+  <button class="btn-modo" onclick="mostrarModoGuia('veiculos', this)">
+    🚛 Veículos
+  </button>
+</div>
+   
+    <section class="nota-formal">
+      ℹ️ <strong>IMPORTANTE:</strong>
+      As informações deste Guia Operacional são orientativas e não substituem consulta técnica, análise de rota, legislação vigente, transportadora especializada ou órgãos competentes.
+    </section>
+
+<section class="conceitos-operacionais" id="secao-conceitos">
+  <h2>📘 Conceitos Operacionais DCPRO</h2>
+
+  <button class="btn-detalhes" onclick="togglePainelConceitos()">
+    📘 Explorar conceitos
+  </button>
+
+  <div id="painel-conceitos" class="painel-conceitos">
+    <div class="conceito-topo">
+      <button class="btn-nav-conceito" onclick="mudarConceito(-1)">◀</button>
+
+      <div>
+        <h3 id="titulo-conceito">O que é AET?</h3>
+        <span id="contador-conceito">1 / 6</span>
+      </div>
+
+      <button class="btn-nav-conceito" onclick="mudarConceito(1)">▶</button>
+    </div>
+
+    <div id="conteudo-conceito" class="conteudo-conceito"></div>
+  </div>
+</section>
+
+<!-- 🚚 PLATAFORMAS CONVENCIONAIS -->
+
+<article id="veiculo-prancha-rebaixada" class="card-biblioteca" data-categoria="maquinas industriais agricola" data-tags="carreta plataforma plataforma carga aberta cargas abertas máquina agricola maquinas agricolas maquinas agrícolas trator tratores empilhadeira empilhadeiras bobina bobinas chapa chapas metalicas chapas metálicas conteiner container contêiner contêineres estrutura metalica estruturas metalicas tubo tubos equipamento industrial equipamentos industriais carga paletizada cargas paletizadas carregamento lateral carregamento superior guindaste ponte rolante">
+
+  <span class="selo-biblioteca">🚚 CARGA ABERTA</span>
+
+  <h2>Carreta Plataforma</h2>
+
+  <div class="info-tecnica">
+    <p><strong>Medidas típicas:</strong> comprimento entre 12,00 m e 15,00 m, largura aproximada de 2,60 m.</p>
+
+    <p><strong>Capacidade típica:</strong> aproximadamente 25 a 40 toneladas, dependendo da configuração do veículo.</p>
+
+    <p><strong>AET:</strong> normalmente dispensada para cargas dentro dos limites legais, podendo ser necessária quando houver excesso de peso ou dimensões.</p>
+  </div>
+
+  <p><strong>Uso comum:</strong> máquinas agrícolas, chapas metálicas, contêineres, estruturas metálicas, bobinas, equipamentos industriais e cargas paletizadas.</p>
+
+  <p><strong>Aplicação:</strong> indicada para cargas abertas que não necessitam de baú, oferecendo facilidade de carregamento lateral, superior e traseiro.</p>
+
+  <button class="btn-detalhes" onclick="toggleDetalhes(this)">
+    🔎 Ver ficha completa
+  </button>
+
+  <div class="detalhes-tecnicos">
+
+    <h3>Ficha Técnica — Carreta Plataforma</h3>
+
+    <p><strong>Quando utilizar:</strong> quando a carga não exige proteção contra intempéries e pode ser transportada sobre uma plataforma aberta.</p>
+
+    <p><strong>Vantagens:</strong></p>
+
+    <ul>
+      <li>Grande versatilidade para diferentes tipos de carga.</li>
+      <li>Facilidade de carregamento por guindastes e pontes rolantes.</li>
+      <li>Permite carga e descarga pelos quatro lados.</li>
+      <li>Baixo custo operacional em comparação aos equipamentos especiais.</li>
+    </ul>
+
+    <p><strong>Limitações:</strong></p>
+
+    <ul>
+      <li>Não protege a carga contra chuva ou intempéries.</li>
+      <li>Necessita amarração adequada.</li>
+      <li>Pode exigir lonamento dependendo da carga transportada.</li>
+      <li>Limitada para cargas muito altas ou extremamente pesadas.</li>
+    </ul>
+
+    <p><strong>Complexidade operacional:</strong> ⭐⭐⭐☆☆ Média.</p>
+
+    <p><strong>Necessidade de AET:</strong> somente quando houver excesso de peso, largura, comprimento ou altura em relação aos limites estabelecidos pela legislação.</p>
+
+    <p><strong>Exemplos reais:</strong> tratores agrícolas, empilhadeiras, bobinas de aço, chapas metálicas, tubos, contêineres, equipamentos industriais e estruturas metálicas.</p>
+
+    <p><strong>Dica DCPRO:</strong> é uma das carretas mais versáteis do transporte rodoviário. Sempre confira o centro de gravidade da carga e a distribuição do peso sobre os eixos.</p>
+
+    <p><strong>Curiosidade DCPRO:</strong> apesar de simples, a plataforma continua sendo uma das implementações mais utilizadas no transporte de cargas industriais devido à sua flexibilidade.</p>
+
+    <p><strong>Veículos semelhantes:</strong> Prancha Rebaixada, Carreta Extensível e Bitrem Prancha.</p>
+
+  </div>
+
+</article>
+
+<!-- 🚛 PRANCHAS -->
+
+<article id="veiculo-prancha-rebaixada" class="card-biblioteca" data-categoria="maquinas industriais agricola" data-tags="prancha rebaixada carreta prancha baixa escavadeira escavadeiras trator tratores colheitadeira colheitadeiras motoniveladora motoniveladoras pa carregadeira pas carregadeiras rolo compactador rolos compactadores maquina pesada maquinas pesadas equipamento industrial equipamentos industriais carga alta altura excesso de altura transporte de maquinas prancha para maquina plataforma baixa">
+  <span class="selo-biblioteca">🚛 OPERAÇÃO ESPECIAL</span>
+
+  <h2>Prancha Rebaixada</h2>
+
+  <div class="info-tecnica">
+    <p><strong>Medidas típicas:</strong> comprimento variável, largura média entre 2,60 m e 3,20 m.</p>
+    <p><strong>Capacidade típica:</strong> aproximadamente 20 a 80 toneladas, podendo variar conforme configuração.</p>
+    <p><strong>AET:</strong> pode ser necessária conforme dimensões, peso, rota e legislação vigente.</p>
+  </div>
+
+  <p><strong>Uso comum:</strong> máquinas, tratores, escavadeiras e equipamentos industriais.</p>
+  <p><strong>Aplicação:</strong> indicada para cargas altas, pois reduz a altura total da operação.</p>
+
+  <button class="btn-detalhes" onclick="toggleDetalhes(this)">
+    🔎 Ver ficha completa
+  </button>
+
+  <div class="detalhes-tecnicos">
+    <h3>Ficha Técnica — Prancha Rebaixada</h3>
+
+    <p><strong>Quando utilizar:</strong> quando a principal limitação da operação for a altura da carga. A prancha rebaixada reduz a altura total do conjunto, permitindo transportar equipamentos altos com maior segurança.</p>
+
+    <p><strong>Vantagens:</strong></p>
+    <ul>
+      <li>Reduz significativamente a altura total da operação.</li>
+      <li>Boa estabilidade para máquinas pesadas.</li>
+      <li>Facilita o transporte de equipamentos de grande porte.</li>
+      <li>Pode reduzir desvios por limitações de altura.</li>
+    </ul>
+
+    <p><strong>Limitações:</strong></p>
+    <ul>
+      <li>Exige atenção no carregamento e descarregamento.</li>
+      <li>Pode necessitar de rampas apropriadas.</li>
+      <li>O ângulo de ataque pode limitar alguns equipamentos.</li>
+      <li>Pode exigir AET conforme peso, rota e dimensões finais.</li>
+    </ul>
+
+    <p><strong>Complexidade operacional:</strong> ⭐⭐⭐⭐☆ Alta.</p>
+
+    <p><strong>Necessidade de AET:</strong> depende do PBTC, largura final, altura final, comprimento total, rota e órgão responsável pela via.</p>
+
+    <p><strong>Exemplos reais:</strong> escavadeiras, tratores, motoniveladoras, pás carregadeiras, rolos compactadores, colheitadeiras, perfuratrizes, britadores móveis e máquinas florestais.</p>
+
+    <p><strong>Dica DCPRO:</strong> antes de escolher uma plataforma convencional, compare a altura final da operação. Em muitos casos, a prancha rebaixada é mais adequada quando o principal problema é altura.</p>
+
+    <p><strong>Curiosidade DCPRO:</strong> existem diferentes configurações de prancha rebaixada, como modelos de 2 eixos, 3 eixos, pescoço removível e versões hidráulicas. A escolha depende do peso, dimensões, distribuição da carga e percurso.</p>
+
+    <p><strong>Veículos semelhantes:</strong> Prancha Extensível, Carreta Lagartixa, Carreta Plataforma e Linha de Eixos.</p>
+  </div>
+</article>
+
+<article class="card-biblioteca" data-categoria="maquinas industriais" data-tags="carreta lagartixa lagartixa prancha lagartixa maquina pesada maquinas pesadas escavadeira escavadeiras trator de esteira tratores de esteira motoniveladora motoniveladoras pa carregadeira pas carregadeiras rolo compactador rolos compactadores perfuratriz perfuratrizes britador britadores guindaste sobre esteira altura carga alta centro de gravidade baixo plataforma rebaixada">
+
+  <span class="selo-biblioteca">🚛 OPERAÇÃO ESPECIAL</span>
+
+  <h2>Carreta Lagartixa</h2>
+
+  <div class="info-tecnica">
+    <p><strong>Medidas típicas:</strong> comprimento entre 12,00 m e 18,00 m, largura aproximada de 2,60 m e altura reduzida da plataforma.</p>
+
+    <p><strong>Capacidade típica:</strong> aproximadamente 30 a 80 toneladas, conforme configuração.</p>
+
+    <p><strong>AET:</strong> geralmente necessária para cargas com excesso de peso, altura, largura ou comprimento.</p>
+  </div>
+
+  <p><strong>Uso comum:</strong> escavadeiras, tratores de esteira, motoniveladoras, pás carregadeiras, rolos compactadores e máquinas pesadas.</p>
+
+  <p><strong>Aplicação:</strong> reduz a altura total do conjunto, sendo indicada para equipamentos pesados e altos.</p>
+
+  <button class="btn-detalhes" onclick="toggleDetalhes(this)">
+    🔎 Ver ficha completa
+  </button>
+
+  <div class="detalhes-tecnicos">
+
+    <h3>Ficha Técnica — Carreta Lagartixa</h3>
+
+    <p><strong>Quando utilizar:</strong> quando a operação exigir transportar máquinas pesadas mantendo a menor altura possível em relação ao solo.</p>
+
+    <p><strong>Vantagens:</strong></p>
+
+    <ul>
+      <li>Excelente estabilidade para máquinas pesadas.</li>
+      <li>Centro de gravidade reduzido.</li>
+      <li>Facilita o transporte de equipamentos altos.</li>
+      <li>Boa distribuição de peso entre os eixos.</li>
+    </ul>
+
+    <p><strong>Limitações:</strong></p>
+
+    <ul>
+      <li>Necessita áreas adequadas para carga e descarga.</li>
+      <li>Possui limitações em terrenos muito irregulares.</li>
+      <li>Algumas operações exigem rampas específicas.</li>
+      <li>Frequentemente necessita AET.</li>
+    </ul>
+
+    <p><strong>Complexidade operacional:</strong> ⭐⭐⭐⭐⭐ Muito Alta.</p>
+
+    <p><strong>Necessidade de AET:</strong> bastante comum quando houver excesso de peso, altura, largura ou quando a rota possuir restrições.</p>
+
+    <p><strong>Exemplos reais:</strong> tratores de esteira, escavadeiras hidráulicas, perfuratrizes, guindastes sobre esteiras, britadores móveis e equipamentos de mineração.</p>
+
+    <p><strong>Dica DCPRO:</strong> quando a limitação principal for a altura da máquina, a Carreta Lagartixa normalmente oferece melhor desempenho que uma plataforma convencional.</p>
+
+    <p><strong>Curiosidade DCPRO:</strong> o nome "Lagartixa" surgiu devido ao formato do pescoço rebaixado do implemento, permitindo transportar máquinas mais próximas ao solo.</p>
+
+    <p><strong>Veículos semelhantes:</strong> Prancha Rebaixada, Linha de Eixos, Módulo Hidráulico e SPMT.</p>
+
+  </div>
+
+</article>
+
+<article id="veiculo-prancha-extensivel" class="card-biblioteca" data-categoria="longas industriais" data-tags="prancha extensivel prancha extensiva extensivel extensiva pa eolica pas eolicas eolica eolicas aerogerador aerogeradores helice helices viga vigas tubo tubos poste postes estrutura metalica estruturas metalicas torre torres perfil metalico perfis metalicos carga longa comprimento excesso de comprimento transporte longo peça longa peca longa longarina longarinas">
+  <span class="selo-biblioteca">🚛 OPERAÇÃO ESPECIAL</span>
+
+  <h2>Prancha Extensível</h2>
+
+  <div class="info-tecnica">
+    <p><strong>Medidas típicas:</strong> comprimento variável, normalmente entre 14,00 m e 30,00 m, podendo existir modelos ainda maiores.</p>
+    <p><strong>Capacidade típica:</strong> aproximadamente 25 a 80 toneladas, podendo variar conforme configuração.</p>
+    <p><strong>AET:</strong> normalmente necessária quando houver excesso de comprimento, largura, peso ou combinação desses fatores.</p>
+  </div>
+
+  <p><strong>Uso comum:</strong> vigas, tubos, estruturas metálicas, postes, pás eólicas, torres e peças longas.</p>
+  <p><strong>Aplicação:</strong> permite aumentar o comprimento útil do conjunto para acomodar cargas que excedem uma prancha convencional.</p>
+
+  <button class="btn-detalhes" onclick="toggleDetalhes(this)">
+    🔎 Ver ficha completa
+  </button>
+
+  <div class="detalhes-tecnicos">
+    <h3>Ficha Técnica — Prancha Extensível</h3>
+
+    <p><strong>Quando utilizar:</strong> quando o principal desafio da operação for o comprimento da carga. A prancha extensível aumenta o comprimento útil do equipamento, permitindo transportar cargas indivisíveis longas com maior segurança.</p>
+
+    <p><strong>Vantagens:</strong></p>
+    <ul>
+      <li>Permite transportar cargas extremamente longas.</li>
+      <li>Maior flexibilidade operacional.</li>
+      <li>Boa distribuição do peso entre os eixos.</li>
+      <li>Reduz necessidade de improvisações.</li>
+    </ul>
+
+    <p><strong>Limitações:</strong></p>
+    <ul>
+      <li>Menor agilidade em manobras.</li>
+      <li>Exige maior raio de curva.</li>
+      <li>Pode exigir cavalo mecânico mais potente.</li>
+      <li>Frequentemente necessita AET.</li>
+    </ul>
+
+    <p><strong>Complexidade operacional:</strong> ⭐⭐⭐⭐☆ Alta.</p>
+    <p><strong>Necessidade de AET:</strong> normalmente necessária quando houver excesso de comprimento, combinação de excessos dimensionais ou exigência da rota.</p>
+    <p><strong>Exemplos reais:</strong> pás eólicas, postes de concreto, tubos industriais, vigas metálicas, estruturas pré-moldadas, torres e longarinas.</p>
+    <p><strong>Dica DCPRO:</strong> quando o problema principal da operação for o comprimento da carga, a prancha extensível costuma ser a solução mais eficiente.</p>
+    <p><strong>Curiosidade DCPRO:</strong> existem modelos telescópicos hidráulicos e mecânicos capazes de atingir mais de 40 metros de comprimento útil.</p>
+    <p><strong>Veículos semelhantes:</strong> Prancha Rebaixada, Carreta Extensível, Linha de Eixos e Dolly.</p>
+  </div>
+</article>
+
+<article class="card-biblioteca" data-categoria="longas industriais" data-tags="carreta extensivel carreta extensiva extensivel extensiva pa eolica pas eolicas eolica eolicas aerogerador aerogeradores poste postes viga vigas tubo tubos torre torres perfil estrutural perfis estruturais longarina longarinas carga longa comprimento excesso de comprimento peça longa peca longa carreta para carga longa">
+
+  <span class="selo-biblioteca">🚛 OPERAÇÃO ESPECIAL</span>
+
+  <h2>Carreta Extensível</h2>
+
+  <div class="info-tecnica">
+
+    <p><strong>Medidas típicas:</strong> comprimento variável entre aproximadamente 14,00 m e 30,00 m, podendo existir versões superiores conforme o fabricante.</p>
+
+    <p><strong>Capacidade típica:</strong> aproximadamente 30 a 60 toneladas, dependendo da configuração e quantidade de eixos.</p>
+
+    <p><strong>AET:</strong> normalmente necessária quando houver excesso de comprimento, largura ou peso em relação aos limites legais.</p>
+
+  </div>
+
+  <p><strong>Uso comum:</strong> pás eólicas, postes, vigas metálicas, tubos industriais, torres, perfis estruturais e equipamentos de grande comprimento.</p>
+
+  <p><strong>Aplicação:</strong> indicada para cargas indivisíveis de grande comprimento que excedem uma carreta convencional.</p>
+
+  <button class="btn-detalhes" onclick="toggleDetalhes(this)">
+    🔎 Ver ficha completa
+  </button>
+
+  <div class="detalhes-tecnicos">
+
+    <h3>Ficha Técnica — Carreta Extensível</h3>
+
+    <p><strong>Quando utilizar:</strong> quando a principal limitação da operação for o comprimento da carga e uma plataforma convencional não for suficiente.</p>
+
+    <p><strong>Vantagens:</strong></p>
+
+    <ul>
+      <li>Grande capacidade para cargas longas.</li>
+      <li>Comprimento ajustável conforme a necessidade.</li>
+      <li>Boa estabilidade para peças estruturais.</li>
+      <li>Menor custo operacional que sistemas modulares.</li>
+    </ul>
+
+    <p><strong>Limitações:</strong></p>
+
+    <ul>
+      <li>Raio de curva elevado.</li>
+      <li>Manobras mais complexas.</li>
+      <li>Pode exigir escolta dependendo da rota.</li>
+      <li>Frequentemente necessita AET.</li>
+    </ul>
+
+    <p><strong>Complexidade operacional:</strong> ⭐⭐⭐⭐☆ Alta.</p>
+
+    <p><strong>Necessidade de AET:</strong> normalmente necessária quando houver excesso de comprimento, combinação dimensional ou exigência específica da rota.</p>
+
+    <p><strong>Exemplos reais:</strong> pás eólicas, postes de concreto, tubos de grande diâmetro, vigas metálicas, perfis estruturais, longarinas e torres de transmissão.</p>
+
+    <p><strong>Dica DCPRO:</strong> antes de escolher uma Linha de Eixos ou um Módulo Hidráulico, verifique se a limitação da carga é apenas o comprimento. Muitas operações podem ser executadas com uma Carreta Extensível.</p>
+
+    <p><strong>Curiosidade DCPRO:</strong> alguns modelos possuem sistema telescópico hidráulico que permite aumentar o comprimento útil rapidamente sem necessidade de desmontagem.</p>
+
+    <p><strong>Veículos semelhantes:</strong> Prancha Extensível, Carreta Plataforma, Linha de Eixos e Dolly.</p>
+
+  </div>
+
+</article>
+
+<!-- 🔗 COMPOSIÇÕES ESPECIAIS -->
+
+<article class="card-biblioteca" data-categoria="longas superpesadas industriais" data-tags="dolly dolly de apoio apoio eixo eixos composição especial composicao especial carga longa comprimento carga pesada peso distribuição de peso distribuicao de peso linha de eixos linhas de eixos prancha extensivel carreta extensivel pa eolica pas eolicas viga vigas transformador transformadores modulo industrial modulos industriais">
+
+  <span class="selo-biblioteca">🚛 OPERAÇÃO ESPECIAL</span>
+
+  <h2>Dolly</h2>
+
+  <div class="info-tecnica">
+    <p><strong>Medidas típicas:</strong> equipamento auxiliar de ligação, utilizado em diversas configurações de conjuntos rodoviários.</p>
+
+    <p><strong>Capacidade típica:</strong> varia conforme a composição do conjunto e a legislação vigente.</p>
+
+    <p><strong>AET:</strong> pode ser necessária quando utilizado em operações especiais com cargas indivisíveis ou combinações veiculares diferenciadas.</p>
+  </div>
+
+  <p><strong>Uso comum:</strong> apoio em cargas longas, linhas de eixos, composições especiais e aumento da capacidade operacional.</p>
+
+  <p><strong>Aplicação:</strong> conecta implementos e distribui melhor a carga entre os eixos, permitindo formar conjuntos especiais de transporte.</p>
+
+  <button class="btn-detalhes" onclick="toggleDetalhes(this)">
+    🔎 Ver ficha completa
+  </button>
+
+  <div class="detalhes-tecnicos">
+
+    <h3>Ficha Técnica — Dolly</h3>
+
+    <p><strong>Quando utilizar:</strong> quando houver necessidade de conectar implementos ou criar composições especiais para transportar cargas longas ou muito pesadas.</p>
+
+    <p><strong>Vantagens:</strong></p>
+
+    <ul>
+      <li>Grande flexibilidade na montagem de conjuntos especiais.</li>
+      <li>Melhora a distribuição do peso entre os eixos.</li>
+      <li>Permite transportar cargas muito longas.</li>
+      <li>Reduz a concentração de carga sobre um único eixo.</li>
+    </ul>
+
+    <p><strong>Limitações:</strong></p>
+
+    <ul>
+      <li>Exige planejamento operacional.</li>
+      <li>Maior raio de giro.</li>
+      <li>Necessita motoristas experientes.</li>
+      <li>Pode exigir escolta e AET.</li>
+    </ul>
+
+    <p><strong>Complexidade operacional:</strong> ⭐⭐⭐⭐☆ Alta.</p>
+
+    <p><strong>Necessidade de AET:</strong> comum em operações com excesso de comprimento, peso ou combinações especiais de veículos.</p>
+
+    <p><strong>Exemplos reais:</strong> transporte de pás eólicas, transformadores, vigas metálicas, torres de transmissão, módulos industriais e linhas de eixos.</p>
+
+    <p><strong>Dica DCPRO:</strong> o Dolly não é utilizado sozinho. Ele faz parte de uma composição especial, aumentando a capacidade e a flexibilidade do conjunto transportador.</p>
+
+    <p><strong>Curiosidade DCPRO:</strong> existem modelos de Dolly com diferentes quantidades de eixos e sistemas de direção, permitindo adaptações para diversos tipos de carga.</p>
+
+    <p><strong>Veículos semelhantes:</strong> Linha de Eixos, Módulo Hidráulico, SPMT e Carreta Extensível.</p>
+
+  </div>
+
+</article>
+
+<article class="card-biblioteca" data-categoria="maquinas longas superpesadas industriais agricola" data-tags="bitrem rodotrem bitrem prancha rodotrem prancha composição especial composicao especial carga pesada cargas pesadas carga longa cargas longas grande volume peso capacidade alta distribuição de peso distribuicao de peso maquinas pesadas máquinas pesadas equipamento industrial equipamentos industriais estrutura metalica estruturas metalicas tubo tubos peça industrial peca industrial peças industriais pecas industriais carga indivisivel carga indivisível múltiplas viagens multiplas viagens">
+
+  <span class="selo-biblioteca">🚛 COMPOSIÇÃO ESPECIAL</span>
+
+  <h2>Bitrem / Rodotrem Prancha</h2>
+
+  <div class="info-tecnica">
+
+    <p><strong>Medidas típicas:</strong> composição formada por dois ou mais implementos do tipo prancha, com comprimento total variável conforme configuração e legislação aplicável.</p>
+
+    <p><strong>Capacidade típica:</strong> aproximadamente 50 a 100 toneladas ou mais, dependendo da composição, quantidade de eixos e autorização operacional.</p>
+
+    <p><strong>AET:</strong> pode ser necessária conforme comprimento total, peso bruto combinado, dimensões da carga, rota e regulamentação vigente.</p>
+
+  </div>
+
+  <p><strong>Uso comum:</strong> cargas pesadas, máquinas, equipamentos industriais, estruturas metálicas, peças longas e operações com grande volume ou peso.</p>
+
+  <p><strong>Aplicação:</strong> indicada quando há necessidade de maior capacidade de carga, melhor distribuição de peso ou composição especial para operações de grande porte.</p>
+
+  <button class="btn-detalhes" onclick="toggleDetalhes(this)">
+    🔎 Ver ficha completa
+  </button>
+
+  <div class="detalhes-tecnicos">
+
+    <h3>Ficha Técnica — Bitrem / Rodotrem Prancha</h3>
+
+    <p><strong>Quando utilizar:</strong> quando a operação exige maior capacidade de transporte do que uma carreta simples, especialmente em cargas pesadas, longas ou com necessidade de melhor distribuição de peso entre os eixos.</p>
+
+    <p><strong>Vantagens:</strong></p>
+
+    <ul>
+      <li>Maior capacidade de carga em comparação a uma carreta simples.</li>
+      <li>Melhor distribuição de peso entre os conjuntos de eixos.</li>
+      <li>Boa alternativa para operações com grande volume ou peso.</li>
+      <li>Pode reduzir a necessidade de múltiplas viagens em algumas operações.</li>
+    </ul>
+
+    <p><strong>Limitações:</strong></p>
+
+    <ul>
+      <li>Maior comprimento total da composição.</li>
+      <li>Manobras mais complexas.</li>
+      <li>Nem todas as rotas permitem circulação desse tipo de conjunto.</li>
+      <li>Pode exigir AET, escolta ou estudo de rota conforme a operação.</li>
+    </ul>
+
+    <p><strong>Complexidade operacional:</strong> ⭐⭐⭐⭐☆ Alta.</p>
+
+    <p><strong>Necessidade de AET:</strong> pode ser necessária quando houver excesso de comprimento, peso, largura, altura ou quando a configuração da composição exigir autorização específica.</p>
+
+    <p><strong>Exemplos reais:</strong> máquinas pesadas, equipamentos agrícolas, estruturas metálicas, tubos, peças industriais, módulos de menor porte e cargas indivisíveis com maior demanda de capacidade.</p>
+
+    <p><strong>Dica DCPRO:</strong> antes de utilizar múltiplos veículos menores, avalie se uma composição Bitrem ou Rodotrem Prancha pode reduzir viagens e melhorar a distribuição da carga.</p>
+
+    <p><strong>Curiosidade DCPRO:</strong> o uso desse tipo de composição depende fortemente da rota, da legislação vigente e da configuração autorizada. Por isso, nem sempre a maior capacidade significa maior viabilidade operacional.</p>
+
+    <p><strong>Veículos semelhantes:</strong> Carreta Plataforma, Carreta Extensível, Dolly, Linha de Eixos e Prancha Rebaixada.</p>
+
+  </div>
+
+</article>
+
+<!-- ⚙️ SISTEMAS MODULARES -->
+
+<article class="card-biblioteca" data-categoria="superpesadas industriais" data-tags="linha de eixos linhas de eixos eixo eixos modular modulo modulos carga superpesada superpesada superpesado peso extremo peso elevado carga indivisivel carga indivisível transformador transformadores gerador geradores reator reatores turbina turbinas vaso de pressão vasos de pressão vaso de pressao vasos de pressao rotor rotores estator estatores equipamento industrial equipamentos industriais distribuição por eixo distribuicao por eixo">
+
+  <span class="selo-biblioteca">🚛 OPERAÇÃO ESPECIAL</span>
+
+  <h2>Linha de Eixos</h2>
+
+  <div class="info-tecnica">
+    <p><strong>Medidas típicas:</strong> sistema modular, com comprimento e largura variáveis conforme a quantidade de eixos e a configuração da operação.</p>
+    <p><strong>Capacidade típica:</strong> aproximadamente 80 toneladas até várias centenas de toneladas, podendo superar 1.000 toneladas em composições especiais.</p>
+    <p><strong>AET:</strong> normalmente necessária devido ao peso, dimensões, configuração do conjunto e exigências da rota.</p>
+  </div>
+
+  <p><strong>Uso comum:</strong> transformadores, geradores, reatores, vasos de pressão, turbinas, equipamentos industriais e cargas superpesadas.</p>
+  <p><strong>Aplicação:</strong> indicada para cargas indivisíveis de grande peso, permitindo distribuir a carga entre vários eixos e reduzir a pressão por eixo.</p>
+
+  <button class="btn-detalhes" onclick="toggleDetalhes(this)">
+    🔎 Ver ficha completa
+  </button>
+
+  <div class="detalhes-tecnicos">
+    <h3>Ficha Técnica — Linha de Eixos</h3>
+
+    <p><strong>Quando utilizar:</strong> quando a carga possui peso elevado, centro de gravidade crítico ou necessidade de distribuição especial de carga entre vários eixos.</p>
+
+    <p><strong>Configurações comuns:</strong></p>
+    <ul>
+      <li>Linha de 4 eixos.</li>
+      <li>Linha de 6 eixos.</li>
+      <li>Linha de 8 eixos.</li>
+      <li>Linhas combinadas em paralelo ou em série.</li>
+      <li>Composições modulares com direção hidráulica.</li>
+    </ul>
+
+    <p><strong>Vantagens:</strong></p>
+    <ul>
+      <li>Alta capacidade de carga.</li>
+      <li>Excelente distribuição de peso por eixo.</li>
+      <li>Grande flexibilidade de configuração.</li>
+      <li>Indicado para cargas superpesadas e indivisíveis.</li>
+    </ul>
+
+    <p><strong>Limitações:</strong></p>
+    <ul>
+      <li>Operação de alta complexidade.</li>
+      <li>Exige estudo de rota detalhado.</li>
+      <li>Normalmente requer escolta e planejamento técnico.</li>
+      <li>Baixa agilidade em manobras e deslocamentos urbanos.</li>
+    </ul>
+
+    <p><strong>Complexidade operacional:</strong> ⭐⭐⭐⭐⭐ Especial.</p>
+    <p><strong>Necessidade de AET:</strong> normalmente necessária, especialmente em operações com excesso de peso, largura, comprimento, altura ou necessidade de análise estrutural da rota.</p>
+    <p><strong>Exemplos reais:</strong> transformadores de potência, geradores, reatores industriais, turbinas, vasos de pressão, rotores, estatores e grandes módulos industriais.</p>
+    <p><strong>Dica DCPRO:</strong> quando o principal problema for peso e distribuição por eixo, a Linha de Eixos costuma ser mais adequada que pranchas convencionais.</p>
+    <p><strong>Curiosidade DCPRO:</strong> a Linha de Eixos não é um veículo único, mas um sistema modular configurado conforme peso, dimensões, rota e características da carga.</p>
+    <p><strong>Veículos semelhantes:</strong> Módulo Hidráulico, SPMT, Dolly e Prancha Rebaixada.</p>
+  </div>
+
+</article>
+
+<article class="card-biblioteca" data-categoria="superpesadas industriais portuario" data-tags="modulo hidraulico módulo hidráulico modulo hidráulico módulo hidraulico modulos hidraulicos módulos hidráulicos carga superpesada superpesada superpesado peso extremo peso elevado transformador transformadores reator reatores gerador geradores vaso de pressão vasos de pressão vaso de pressao vasos de pressao petroquimico petroquimica usina hidreletrica hidreletrica estrutura metalica modulo industrial modulos industriais suspensão hidráulica suspensao hidraulica">
+
+  <span class="selo-biblioteca">🚛 OPERAÇÃO ESPECIAL</span>
+
+  <h2>Módulo Hidráulico</h2>
+
+  <div class="info-tecnica">
+    <p><strong>Medidas típicas:</strong> sistema modular de comprimento e largura variáveis, configurado conforme as necessidades da operação.</p>
+
+    <p><strong>Capacidade típica:</strong> aproximadamente 200 toneladas até mais de 2.000 toneladas, dependendo da quantidade de módulos utilizados.</p>
+
+    <p><strong>AET:</strong> obrigatória na grande maioria das operações devido ao peso, dimensões e características da composição.</p>
+  </div>
+
+  <p><strong>Uso comum:</strong> transformadores de potência, reatores, geradores, torres industriais, equipamentos petroquímicos, vasos de pressão e módulos industriais.</p>
+
+  <p><strong>Aplicação:</strong> utilizado para transporte de cargas superpesadas e indivisíveis, permitindo distribuir o peso por dezenas de eixos hidráulicos.</p>
+
+  <button class="btn-detalhes" onclick="toggleDetalhes(this)">
+    🔎 Ver ficha completa
+  </button>
+
+  <div class="detalhes-tecnicos">
+
+    <h3>Ficha Técnica — Módulo Hidráulico</h3>
+
+    <p><strong>Quando utilizar:</strong> quando o peso da carga ultrapassar a capacidade das linhas de eixos convencionais ou quando houver necessidade de grande capacidade de distribuição de carga.</p>
+
+    <p><strong>Configurações comuns:</strong></p>
+
+    <ul>
+      <li>Módulos de 4 linhas de eixos.</li>
+      <li>Módulos de 6 linhas de eixos.</li>
+      <li>Módulos de 8 linhas de eixos.</li>
+      <li>Composições paralelas.</li>
+      <li>Composições longitudinais.</li>
+      <li>Conjuntos hidráulicos sincronizados.</li>
+    </ul>
+
+    <p><strong>Vantagens:</strong></p>
+
+    <ul>
+      <li>Capacidade extremamente elevada.</li>
+      <li>Distribuição uniforme da carga.</li>
+      <li>Grande estabilidade operacional.</li>
+      <li>Permite adaptar a composição conforme o projeto.</li>
+    </ul>
+
+    <p><strong>Limitações:</strong></p>
+
+    <ul>
+      <li>Operação extremamente especializada.</li>
+      <li>Necessita engenharia de transporte.</li>
+      <li>Elevado custo operacional.</li>
+      <li>Normalmente exige estudo detalhado de rota.</li>
+    </ul>
+
+    <p><strong>Complexidade operacional:</strong> ⭐⭐⭐⭐⭐ Especial.</p>
+
+    <p><strong>Necessidade de AET:</strong> praticamente obrigatória, podendo também exigir autorizações complementares, estudos estruturais, escolta especializada e acompanhamento dos órgãos competentes.</p>
+
+    <p><strong>Exemplos reais:</strong> transformadores acima de 300 toneladas, reatores petroquímicos, equipamentos para usinas hidrelétricas, vasos de pressão, módulos industriais e grandes estruturas metálicas.</p>
+
+    <p><strong>Dica DCPRO:</strong> quando a carga ultrapassar a capacidade de uma Linha de Eixos convencional, o Módulo Hidráulico costuma ser a alternativa mais utilizada em operações de grande porte.</p>
+
+    <p><strong>Curiosidade DCPRO:</strong> cada módulo possui suspensão hidráulica independente, permitindo compensar irregularidades do terreno e distribuir melhor o peso durante toda a operação.</p>
+
+    <p><strong>Veículos semelhantes:</strong> Linha de Eixos, SPMT e Dolly.</p>
+
+  </div>
+
+</article>
+
+<article class="card-biblioteca" data-categoria="superpesadas industriais portuario" data-tags="spmt self propelled modular transporter transportador modular autopropelido modulo autopropelido módulos autopropelidos modulos autopropelidos porto portos industria industrias estaleiro estaleiros obra especial obras especiais offshore plataforma plataformas casco naval cascos navais transformador gigante transformadores gigantes petroquimico petroquimica ponte metalica pontes metalicas turbina turbinas carga extrema carga extremamente pesada peso extremo movimentação precisa movimentacao precisa">
+
+  <span class="selo-biblioteca">🚛 OPERAÇÃO ESPECIAL</span>
+
+  <h2>SPMT</h2>
+
+  <div class="info-tecnica">
+    <p><strong>Medidas típicas:</strong> sistema modular autopropelido, com dimensões variáveis conforme a quantidade de módulos acoplados.</p>
+
+    <p><strong>Capacidade típica:</strong> pode variar de dezenas a milhares de toneladas, dependendo da composição utilizada.</p>
+
+    <p><strong>AET:</strong> normalmente necessária quando utilizado em vias públicas, devido ao peso, dimensões e complexidade da operação.</p>
+  </div>
+
+  <p><strong>Uso comum:</strong> portos, indústrias, estaleiros, obras especiais, módulos industriais e cargas extremamente pesadas.</p>
+
+  <p><strong>Aplicação:</strong> transporte modular autopropelido para movimentações de altíssima complexidade, especialmente em áreas industriais e operações especiais.</p>
+
+  <button class="btn-detalhes" onclick="toggleDetalhes(this)">
+    🔎 Ver ficha completa
+  </button>
+
+  <div class="detalhes-tecnicos">
+
+    <h3>Ficha Técnica — SPMT</h3>
+
+    <p><strong>Quando utilizar:</strong> quando a carga possui peso extremo, dimensões elevadas ou exige movimentação precisa em áreas industriais, portuárias ou obras especiais.</p>
+
+    <p><strong>Vantagens:</strong></p>
+    <ul>
+      <li>Altíssima capacidade de carga.</li>
+      <li>Movimentação precisa e controlada.</li>
+      <li>Permite deslocamento lateral, diagonal e giro em espaços reduzidos.</li>
+      <li>Composição modular adaptável ao projeto.</li>
+    </ul>
+
+    <p><strong>Limitações:</strong></p>
+    <ul>
+      <li>Operação extremamente especializada.</li>
+      <li>Custo operacional elevado.</li>
+      <li>Exige equipe técnica experiente.</li>
+      <li>Normalmente utilizado em operações planejadas por engenharia de transporte.</li>
+    </ul>
+
+    <p><strong>Complexidade operacional:</strong> ⭐⭐⭐⭐⭐ Especial.</p>
+
+    <p><strong>Necessidade de AET:</strong> pode ser necessária em deslocamentos por vias públicas. Em áreas internas, portos e plantas industriais, a exigência depende das normas locais e do planejamento da operação.</p>
+
+    <p><strong>Exemplos reais:</strong> módulos industriais, plataformas, cascos navais, transformadores gigantes, equipamentos petroquímicos, pontes metálicas, turbinas e estruturas offshore.</p>
+
+    <p><strong>Dica DCPRO:</strong> o SPMT é indicado quando a operação exige controle preciso de movimentação e capacidade muito acima dos veículos rodoviários convencionais.</p>
+
+    <p><strong>Curiosidade DCPRO:</strong> SPMT significa <em>Self-Propelled Modular Transporter</em>. Ele possui propulsão própria e pode trabalhar em múltiplos módulos sincronizados.</p>
+
+    <p><strong>Veículos semelhantes:</strong> Módulo Hidráulico, Linha de Eixos e Dolly.</p>
+
+  </div>
+
+</article>
+
+    <div class="acoes-relatorio">
+      <a href="../index.html" class="btn-clear">Voltar ao DCPRO</a>
+    </div>
+  </div>
+
+  <div class="rodape">
+   Guia Operacional - DCPRO
+  </div>
+
+  <script src="../assets/js/conceitos.js"></script>
+  <script src="../assets/js/guia.js"></script>
+
+</body>
+</html>
