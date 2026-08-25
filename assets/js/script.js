@@ -338,30 +338,63 @@ comprimentoOk = true;
 // =====================================================
 
 function agruparItensParaEmpilhamento(itens) {
-  return Object.values(
-    itens.reduce((agrupados, item) => {
-      const chave = [
-        item.id,
-        item.nome,
-        item.comp,
-        item.larg,
-        item.alt,
-        item.peso,
-        item.cor,
-      ].join("|");
+  const grupos = {};
 
-      if (!agrupados[chave]) {
-        agrupados[chave] = {
-          ...item,
-          qtd: 0,
-        };
-      }
+  itens.forEach((item) => {
+    const nomeMinusculo = String(item.nome || "").toLowerCase();
 
-      agrupados[chave].qtd += Number(item.qtd) || 1;
+    const ehPalletOuBase =
+      nomeMinusculo.includes("pallet") ||
+      nomeMinusculo.includes("palete") ||
+      nomeMinusculo.includes("base");
 
-      return agrupados;
-    }, {})
-  );
+    // Base e palete continuam individuais.
+    // Para os demais volumes, a compatibilidade física
+    // para empilhamento é determinada pelas dimensões.
+const chave = ehPalletOuBase
+  ? `individual|${item.id}`
+  : [
+      Number(item.comp).toFixed(4),
+      Number(item.larg).toFixed(4),
+    ].join("|");
+
+    if (!grupos[chave]) {
+      grupos[chave] = {
+        comp: item.comp,
+        larg: item.larg,
+        alt: item.alt,
+
+        ehPalletOuBase,
+
+        unidades: [],
+        qtd: 0,
+      };
+    }
+
+    const quantidade = Number(item.qtd) || 1;
+
+    for (let i = 0; i < quantidade; i++) {
+grupos[chave].unidades.push({
+  id: item.id,
+  nome: item.nome,
+  alt: Number(item.alt) || 0,
+  peso: Number(item.peso) || 0,
+  cor: item.cor,
+});
+    }
+
+    grupos[chave].qtd += quantidade;
+  });
+
+  // Dentro de uma futura pilha:
+  // unidade mais pesada primeiro = parte inferior.
+  Object.values(grupos).forEach((grupo) => {
+    grupo.unidades.sort(
+      (a, b) => b.peso - a.peso
+    );
+  });
+
+  return Object.values(grupos);
 }
 
 function criarViagem(veiculo) {
@@ -396,32 +429,102 @@ function calcularAreaPisoEstimada(itens, veiculo) {
 const itensAgrupados =
   agruparItensParaEmpilhamento(itens);
 
-itensAgrupados.forEach((item) => {
-    const nome = item.nome.toLowerCase();
+itensAgrupados.forEach((grupo) => {
 
-    const ehPalletOuBase =
-      nome.includes("pallet") ||
-      nome.includes("palete") ||
-      nome.includes("base");
+  // Base e palete continuam ocupando
+  // uma posição individual no piso.
+  if (grupo.ehPalletOuBase) {
+    area +=
+      grupo.comp *
+      grupo.larg *
+      grupo.qtd;
 
-    let limiteEmpilhamento = item.alt <= 0.8 ? 3 : 2;
+    return;
+  }
 
-    if (ehPalletOuBase) {
-      limiteEmpilhamento = 1;
+  // =====================================================
+  // EMPILHAMENTO COM ALTURAS VARIÁVEIS
+  //
+  // Caixas com a mesma base física podem compartilhar
+  // uma pilha mesmo possuindo alturas diferentes.
+  //
+  // Regras:
+  // - máximo de 3 unidades quando todas têm até 0,80 m;
+  // - se houver unidade acima de 0,80 m na pilha,
+  //   máximo de 2 unidades;
+  // - soma das alturas nunca pode ultrapassar
+  //   a altura útil do veículo.
+  // =====================================================
+
+  const unidades =
+    [...grupo.unidades].sort(
+      (a, b) => b.alt - a.alt
+    );
+
+  const pilhas = [];
+
+  unidades.forEach((unidade) => {
+
+    let pilhaEncontrada = null;
+
+    for (const pilha of pilhas) {
+
+      const possuiItemAlto =
+        unidade.alt > 0.8 ||
+        pilha.unidades.some(
+          (u) => u.alt > 0.8
+        );
+
+      const limiteQuantidade =
+        possuiItemAlto ? 2 : 3;
+
+      const novaAltura =
+        pilha.alturaTotal +
+        unidade.alt;
+
+      const cabePorQuantidade =
+        pilha.unidades.length <
+        limiteQuantidade;
+
+      const cabePorAltura =
+        novaAltura <=
+        veiculo.altFisica + 0.01;
+
+      if (
+        cabePorQuantidade &&
+        cabePorAltura
+      ) {
+        pilhaEncontrada = pilha;
+        break;
+      }
     }
 
-    let limiteFisico = Math.floor(veiculo.altFisica / item.alt);
+    if (pilhaEncontrada) {
 
-    if (limiteFisico < 1) {
-      limiteFisico = 1;
+      pilhaEncontrada.unidades.push(
+        unidade
+      );
+
+      pilhaEncontrada.alturaTotal +=
+        unidade.alt;
+
+    } else {
+
+      pilhas.push({
+        alturaTotal: unidade.alt,
+        unidades: [unidade],
+      });
     }
-
-    const maxEmpilhamento = Math.min(limiteEmpilhamento, limiteFisico);
-
-    const blocosNoPiso = Math.ceil(item.qtd / maxEmpilhamento);
-
-    area += item.comp * item.larg * blocosNoPiso;
   });
+
+  const blocosNoPiso =
+    pilhas.length;
+
+  area +=
+    grupo.comp *
+    grupo.larg *
+    blocosNoPiso;
+});
 
   return area;
 }
@@ -465,39 +568,97 @@ function testarArrumacaoFisica(veiculo, itens) {
 const itensAgrupados =
   agruparItensParaEmpilhamento(itens);
 
-itensAgrupados.forEach((item) => {
+itensAgrupados.forEach((grupo) => {
 
-    const nomeMinusculo = item.nome.toLowerCase();
+  // Base e palete continuam individuais.
+  if (grupo.ehPalletOuBase) {
 
-    const ehPalletOuBase =
-      nomeMinusculo.includes("pallet") ||
-      nomeMinusculo.includes("palete") ||
-      nomeMinusculo.includes("base");
-
-    let limiteEmpilhamento = item.alt <= 0.8 ? 3 : 2;
-
-    if (ehPalletOuBase) limiteEmpilhamento = 1;
-
-    let limiteFisicoVeiculo = Math.floor(veiculo.altFisica / item.alt);
-
-    if (limiteFisicoVeiculo < 1) limiteFisicoVeiculo = 1;
-
-    const maxEmpilhamento = Math.min(limiteEmpilhamento, limiteFisicoVeiculo);
-
-    let qtdRestante = item.qtd;
-
-    while (qtdRestante > 0) {
-      const empilhados = Math.min(qtdRestante, maxEmpilhamento);
-
-      qtdRestante -= empilhados;
-
+    for (let i = 0; i < grupo.qtd; i++) {
       caixasIndividuais.push({
-        comp: item.comp,
-        larg: item.larg,
-        area: item.comp * item.larg,
+        comp: grupo.comp,
+        larg: grupo.larg,
+        area: grupo.comp * grupo.larg,
+      });
+    }
+
+    return;
+  }
+
+  // =====================================================
+  // EMPILHAMENTO FÍSICO COM ALTURAS VARIÁVEIS
+  // =====================================================
+
+  const unidades =
+    [...grupo.unidades].sort(
+      (a, b) => b.alt - a.alt
+    );
+
+  const pilhas = [];
+
+  unidades.forEach((unidade) => {
+
+    let pilhaEncontrada = null;
+
+    for (const pilha of pilhas) {
+
+      const possuiItemAlto =
+        unidade.alt > 0.8 ||
+        pilha.unidades.some(
+          (u) => u.alt > 0.8
+        );
+
+      const limiteQuantidade =
+        possuiItemAlto ? 2 : 3;
+
+      const novaAltura =
+        pilha.alturaTotal +
+        unidade.alt;
+
+      const cabePorQuantidade =
+        pilha.unidades.length <
+        limiteQuantidade;
+
+      const cabePorAltura =
+        novaAltura <=
+        veiculo.altFisica + 0.01;
+
+      if (
+        cabePorQuantidade &&
+        cabePorAltura
+      ) {
+        pilhaEncontrada = pilha;
+        break;
+      }
+    }
+
+    if (pilhaEncontrada) {
+
+      pilhaEncontrada.unidades.push(
+        unidade
+      );
+
+      pilhaEncontrada.alturaTotal +=
+        unidade.alt;
+
+    } else {
+
+      pilhas.push({
+        alturaTotal: unidade.alt,
+        unidades: [unidade],
       });
     }
   });
+
+  pilhas.forEach(() => {
+
+    caixasIndividuais.push({
+      comp: grupo.comp,
+      larg: grupo.larg,
+      area: grupo.comp * grupo.larg,
+    });
+
+  });
+});
 
   caixasIndividuais.sort((a, b) => b.comp - a.comp || b.area - a.area);
 
@@ -1709,7 +1870,7 @@ const itensAgrupadosParaSVG = Object.values(
 
 renderizarArrumacaoLogica(
   carga.veiculo,
-  agruparItensParaEmpilhamento(carga.itens),
+  carga.itens,
   `svg-${numero}`,
   `legenda-${numero}`,
   `dimesoes-${numero}`,
@@ -2236,50 +2397,219 @@ itensLegenda.forEach((item) => {
   `;
 });
 
-// A arrumação continua processando todas as unidades normalmente.
-itens.forEach((item) => {
+// =====================================================
+// PILHAS FÍSICAS COMPOSTAS
+//
+// Itens cadastrados em linhas diferentes podem compartilhar
+// a mesma pilha quando possuem a mesma base física.
+//
+// A identidade individual de cada volume é preservada.
+// Base e palete continuam sem empilhamento automático.
+// =====================================================
 
-    const nomeMinusculo = item.nome.toLowerCase();
-    let ehPalletOuBase =
-      nomeMinusculo.includes("pallet") ||
-      nomeMinusculo.includes("palete") ||
-      nomeMinusculo.includes("base");
-    let textoInterno = "";
-    if (nomeMinusculo.includes("pallet") || nomeMinusculo.includes("palete"))
-      textoInterno = "PALETE";
-    if (nomeMinusculo.includes("base")) textoInterno = "BASE";
+const gruposEmpilhamento =
+  agruparItensParaEmpilhamento(itens);
 
-    let limiteEmpilhamento = item.alt <= 0.8 ? 3 : 2;
-    if (ehPalletOuBase) limiteEmpilhamento = 1;
-    let limiteFisicoVeiculo = Math.floor(veiculo.altFisica / item.alt);
-    if (limiteFisicoVeiculo < 1) limiteFisicoVeiculo = 1;
-    let maxEmpilhamento = Math.min(limiteEmpilhamento, limiteFisicoVeiculo);
+gruposEmpilhamento.forEach((grupo) => {
 
-    let qtdRestante = item.qtd;
-    while (qtdRestante > 0) {
-      let empilhadosNesseBloco = Math.min(qtdRestante, maxEmpilhamento);
-qtdRestante -= empilhadosNesseBloco;
+  // ===================================================
+  // BASE / PALETE
+  // Permanecem como posições individuais.
+  // ===================================================
+
+  if (grupo.ehPalletOuBase) {
+
+    grupo.unidades.forEach((unidade) => {
+
+      const nomeMinusculo =
+        String(unidade.nome || "").toLowerCase();
+
+      let textoInterno = "";
+
+      if (
+        nomeMinusculo.includes("pallet") ||
+        nomeMinusculo.includes("palete")
+      ) {
+        textoInterno = "PALETE";
+      }
+
+      if (nomeMinusculo.includes("base")) {
+        textoInterno = "BASE";
+      }
 
       caixasIndividuais.push({
-  id: item.id,
-  nome: item.nome,
-  comp: item.comp,
-  larg: item.larg,
-  cor: item.cor,
-  ehPallet: ehPalletOuBase,
-  textoTxt: textoInterno,
-  empilhados: empilhadosNesseBloco,
+        id: unidade.id,
+        nome: unidade.nome,
 
-  pesoUnitario: item.peso,
-  pesoBloco: item.peso * empilhadosNesseBloco,
+        comp: grupo.comp,
+        larg: grupo.larg,
 
-  dimTexto: `${item.comp.toFixed(2)}x${item.larg.toFixed(2)}`,
-  area: item.comp * item.larg,
-});
+        cor: unidade.cor,
 
+        ehPallet: true,
+        textoTxt: textoInterno,
+
+        empilhados: 1,
+
+        pesoUnitario: unidade.peso,
+        pesoBloco: unidade.peso,
+
+        alturaTotal: unidade.alt,
+
+        unidades: [
+          {
+            ...unidade,
+          },
+        ],
+
+        dimTexto:
+          `${grupo.comp.toFixed(2)}x${grupo.larg.toFixed(2)}`,
+
+        area:
+          grupo.comp * grupo.larg,
+      });
+    });
+
+    return;
+  }
+
+  // ===================================================
+  // CAIXAS / VOLUMES EMPILHÁVEIS
+  // ===================================================
+
+  const unidades =
+    [...grupo.unidades].sort(
+      (a, b) =>
+        b.alt - a.alt ||
+        b.peso - a.peso
+    );
+
+  const pilhas = [];
+
+  unidades.forEach((unidade) => {
+
+    let pilhaEncontrada = null;
+
+    for (const pilha of pilhas) {
+
+      const possuiItemAlto =
+        unidade.alt > 0.8 ||
+        pilha.unidades.some(
+          (u) => u.alt > 0.8
+        );
+
+      const limiteQuantidade =
+        possuiItemAlto ? 2 : 3;
+
+      const novaAltura =
+        pilha.alturaTotal +
+        unidade.alt;
+
+      const cabePorQuantidade =
+        pilha.unidades.length <
+        limiteQuantidade;
+
+      const cabePorAltura =
+        novaAltura <=
+        veiculo.altFisica + 0.01;
+
+      if (
+        cabePorQuantidade &&
+        cabePorAltura
+      ) {
+        pilhaEncontrada = pilha;
+        break;
+      }
+    }
+
+    if (pilhaEncontrada) {
+
+      pilhaEncontrada.unidades.push(
+        unidade
+      );
+
+      pilhaEncontrada.alturaTotal +=
+        unidade.alt;
+
+    } else {
+
+      pilhas.push({
+        alturaTotal: unidade.alt,
+        unidades: [unidade],
+      });
     }
   });
 
+  // ===================================================
+  // CONVERTE CADA PILHA EM UM BLOCO DE PISO
+  // ===================================================
+
+  pilhas.forEach((pilha) => {
+
+    // Depois que a composição física foi definida,
+    // organizamos a pilha pelo peso:
+    // mais pesado primeiro = parte inferior.
+    pilha.unidades.sort(
+      (a, b) => b.peso - a.peso
+    );
+
+    const pesoBloco =
+      pilha.unidades.reduce(
+        (total, unidade) =>
+          total + unidade.peso,
+        0
+      );
+
+    const unidadeReferencia =
+      pilha.unidades[0];
+
+    const nomesPilha =
+      pilha.unidades
+        .map((unidade) => unidade.nome)
+        .join(" + ");
+
+    caixasIndividuais.push({
+      id: unidadeReferencia.id,
+
+      nome:
+        pilha.unidades.length > 1
+          ? nomesPilha
+          : unidadeReferencia.nome,
+
+      comp: grupo.comp,
+      larg: grupo.larg,
+
+      cor: unidadeReferencia.cor,
+
+      ehPallet: false,
+      textoTxt: "",
+
+      empilhados:
+        pilha.unidades.length,
+
+      pesoUnitario:
+        unidadeReferencia.peso,
+
+      pesoBloco,
+
+      alturaTotal:
+        pilha.alturaTotal,
+
+      unidades:
+        pilha.unidades.map(
+          (unidade) => ({
+            ...unidade,
+          })
+        ),
+
+      dimTexto:
+        `${grupo.comp.toFixed(2)}x${grupo.larg.toFixed(2)}`,
+
+      area:
+        grupo.comp * grupo.larg,
+    });
+  });
+});
   caixasIndividuais.sort((a, b) => {
   const pesoA = (a.peso || 0) * (a.quantidadeEmpilhada || 1);
   const pesoB = (b.peso || 0) * (b.quantidadeEmpilhada || 1);
@@ -3224,9 +3554,7 @@ const deslocamentoX = Math.max(
   geometricamente por enquanto.
 */
 const deslocamentoY =
-  usouFallbackFisico
-    ? (veiculo.largFisica - larguraOcupada) / 2 - menorY
-    : 0;
+  (veiculo.largFisica - larguraOcupada) / 2 - menorY;
 
 console.log("C3 — ajuste final pelo CG:", {
   cgAntesMetros:
@@ -3260,17 +3588,57 @@ caixasDentroDoVeiculo.forEach((caixa) => {
   caixasPosicionadas.forEach((caixa, index) => {
     pesoTotalBlocos += caixa.pesoBloco;
 
-    console.log(`Bloco ${index + 1}`, {
-      item: caixa.nome,
-      id: caixa.id,
-      quantidadeEmpilhada: caixa.empilhados,
-      pesoUnitarioKg: caixa.pesoUnitario,
-      pesoBlocoKg: caixa.pesoBloco,
-      posicaoXMetros: Number(caixa.X_Fisico.toFixed(2)),
-      posicaoYMetros: Number(caixa.Y_Fisico.toFixed(2)),
-      comprimentoMetros: Number(caixa.compRender.toFixed(2)),
-      larguraMetros: Number(caixa.largRender.toFixed(2)),
-    });
+console.log(`Bloco ${index + 1}`, {
+  item: caixa.nome,
+  id: caixa.id,
+
+  quantidadeEmpilhada:
+    caixa.empilhados,
+
+  alturaTotalMetros:
+    Number(
+      (caixa.alturaTotal || 0).toFixed(2)
+    ),
+
+  composicaoPilha:
+    Array.isArray(caixa.unidades)
+      ? caixa.unidades.map((unidade) => ({
+          id: unidade.id,
+          nome: unidade.nome,
+          alturaMetros:
+            Number(
+              (unidade.alt || 0).toFixed(2)
+            ),
+          pesoKg: unidade.peso,
+        }))
+      : [],
+
+  pesoUnitarioKg:
+    caixa.pesoUnitario,
+
+  pesoBlocoKg:
+    caixa.pesoBloco,
+
+  posicaoXMetros:
+    Number(
+      caixa.X_Fisico.toFixed(2)
+    ),
+
+  posicaoYMetros:
+    Number(
+      caixa.Y_Fisico.toFixed(2)
+    ),
+
+  comprimentoMetros:
+    Number(
+      caixa.compRender.toFixed(2)
+    ),
+
+  larguraMetros:
+    Number(
+      caixa.largRender.toFixed(2)
+    ),
+});
   });
 
     console.log("Peso total dos blocos:", pesoTotalBlocos, "kg");
@@ -3345,7 +3713,7 @@ if (desvioLateralMetros < -0.01) {
   ladoDesvioLateral = "DIREITA";
 }
 
-console.group("C4 - análise transversal");
+console.group("C4 - análise transversal")
 
 console.log(
   "CG lateral:",
@@ -4052,20 +4420,62 @@ svgCima.appendChild(grupoCabine);
         svgCima.appendChild(textoMedida);
       }
 
-      if (c.empilhados > 1) {
-        let textoQtd = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "text",
-        );
-        textoQtd.setAttribute("x", posX + widthPX / 2);
-        textoQtd.setAttribute("y", posY + heightPX / 2 + 7);
-        textoQtd.setAttribute("fill", "#ffffff");
-        textoQtd.setAttribute("font-size", "9px");
-        textoQtd.setAttribute("font-weight", "bold");
-        textoQtd.setAttribute("text-anchor", "middle");
-        textoQtd.textContent = `${c.empilhados}x`;
-        svgCima.appendChild(textoQtd);
-      }
+if (c.empilhados > 1) {
+
+  let textoQtd = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "text",
+  );
+
+  textoQtd.setAttribute(
+    "x",
+    posX + widthPX / 2
+  );
+
+  textoQtd.setAttribute(
+    "y",
+    posY + heightPX / 2 + 7
+  );
+
+  textoQtd.setAttribute(
+    "fill",
+    "#ffffff"
+  );
+
+  textoQtd.setAttribute(
+    "font-size",
+    "9px"
+  );
+
+  textoQtd.setAttribute(
+    "font-weight",
+    "bold"
+  );
+
+  textoQtd.setAttribute(
+    "text-anchor",
+    "middle"
+  );
+
+  const idsDaPilha =
+    Array.isArray(c.unidades)
+      ? new Set(
+          c.unidades.map(
+            (unidade) => unidade.id
+          )
+        )
+      : new Set();
+
+  const pilhaComposta =
+    idsDaPilha.size > 1;
+
+  textoQtd.textContent =
+    pilhaComposta
+      ? `${c.empilhados} ITENS`
+      : `${c.empilhados}x`;
+
+  svgCima.appendChild(textoQtd);
+}
     }
   });
 
