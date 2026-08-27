@@ -942,7 +942,7 @@ listaCarga = listaCarga.flatMap((item) => {
   veiculoPadraoItem = null;
 }
 
-const existeVeiculoPadraoAdequado = dbVeiculos.some((veiculo) => {
+const veiculoPadraoAdequado = dbVeiculos.find((veiculo) => {
   const cabeNormal =
     item.comp <= veiculo.compFisico &&
     item.larg <= veiculo.largFisica;
@@ -956,7 +956,9 @@ const existeVeiculoPadraoAdequado = dbVeiculos.some((veiculo) => {
   );
 });
 
-if (!existeVeiculoPadraoAdequado) {
+if (veiculoPadraoAdequado) {
+  veiculoPadraoItem = veiculoPadraoAdequado;
+} else {
   veiculoPadraoItem = null;
 }
 
@@ -1116,6 +1118,48 @@ function planejarFrota(listaCarga, veiculoSelecionado = null) {
 
   const { maiorComp, maiorLarg, maiorAlt } =
     obterMaioresDimensoes(cargaAgrupada);
+
+      // =====================================================
+  // PRIORIDADE AO VEÍCULO SELECIONADO PELO USUÁRIO
+  // =====================================================
+
+  if (
+    veiculoSelecionado &&
+    pesoTotal <= veiculoSelecionado.pesoMax &&
+    volumeTotal <= veiculoSelecionado.volMax &&
+    testarArrumacaoFisica(
+      veiculoSelecionado,
+      cargaAgrupada,
+    )
+  ) {
+    const viagem = criarViagem(
+      veiculoSelecionado,
+    );
+
+    viagem.itens = cargaAgrupada;
+    viagem.pesoAtual = pesoTotal;
+    viagem.volumeAtual = volumeTotal;
+
+    viagem.areaAtual = calcularAreaPisoEstimada(
+      cargaAgrupada,
+      veiculoSelecionado,
+    );
+
+    viagem.maiorComprimento = maiorComp;
+    viagem.maiorLargura = maiorLarg;
+    viagem.maiorAltura = maiorAlt;
+
+    console.log(
+      "Frota - carga completa mantida no veículo selecionado:",
+      {
+        veiculo: veiculoSelecionado.nome,
+        pesoTotal,
+        volumeTotal,
+      },
+    );
+
+    return [viagem];
+  }
 
   const veiculoInicial = escolherVeiculoIdeal(
     pesoTotal,
@@ -2068,6 +2112,37 @@ Verifique a necessidade de AET</span>
       </a>
     </span>
   `;
+
+} else if (orientacaoLongitudinalCgAtual) {
+
+  selo.className =
+    "selo-compatibilidade selo-atencao";
+
+  selo.innerHTML = `
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <span>
+      <strong>${orientacaoLongitudinalCgAtual.titulo}</strong><br>
+      ${orientacaoLongitudinalCgAtual.mensagem}
+
+      <br>
+      <small>
+        Classificação interna do DCPRO para triagem matemática.
+        Não representa limite legal ou avaliação real da distribuição por eixo.
+      </small>
+
+      <br>
+      <a
+        href="src/veiculos-especiais-busca-inteligente.html"
+        class="link-guia-limite"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Consulte o Guia Operacional
+      </a>
+    </span>
+  `;
+
+
 } else if (mensagemTransversalCgAtual) {
 
   selo.className =
