@@ -738,6 +738,47 @@ padding: 6px 12px;
 }
 
 /* =======================================================
+   RESPONSIVIDADE - TELAS PEQUENAS (celular)
+======================================================= */
+
+@media (max-width: 480px) {
+  .acoes-principais {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .acoes-tabela {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .acoes-tabela .btn-add,
+  .acoes-tabela .btn-clear {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .btn-consultar-guia {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .veiculo-personalizado-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .alerta-guia {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .btn-consultar-guia-alerta {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* =======================================================
    RESPONSIVIDADE - V1.2.1
 ======================================================= */
 
