@@ -758,22 +758,14 @@ function encontrarVeiculoComArrumacao(indiceInicial, itens) {
       return veiculoAtual;
     }
 
-    // Verifica se o único problema é excesso lateral (AET)
-    let somenteLargura = true;
-
-    for (const item of itens) {
-
-      if (item.comp > veiculoAtual.compFisico) {
-        somenteLargura = false;
-        break;
-      }
-
-      if (item.alt > veiculoAtual.altFisica) {
-        somenteLargura = false;
-        break;
-      }
-
-    }
+    // Verifica se o único problema é excesso lateral (AET) —
+    // só se aplica quando é 1 item sozinho, e o motivo real
+    // de não caber é a largura (não comprimento, altura ou quantidade).
+    const somenteLargura =
+      itens.length === 1 &&
+      itens[0].comp <= veiculoAtual.compFisico &&
+      itens[0].alt <= veiculoAtual.altFisica &&
+      itens[0].larg > veiculoAtual.largFisica;
 
     if (somenteLargura) {
   return veiculoAtual;
@@ -783,45 +775,6 @@ function encontrarVeiculoComArrumacao(indiceInicial, itens) {
   }
 
   return null;
-}
-
-function expandirItensPorQuantidade(listaCarga) {
-  const itensExpandidos = [];
-
-  listaCarga.forEach((item) => {
-    for (let i = 0; i < item.qtd; i++) {
-      itensExpandidos.push({
-        ...item,
-        qtd: 1,
-      });
-    }
-  });
-
-  return itensExpandidos;
-}
-
-function agruparItensPorId(itens) {
-  const agrupados = [];
-
-  itens.forEach((item) => {
-    const existente = agrupados.find(
-      (i) =>
-        i.id === item.id &&
-        i.nome === item.nome &&
-        i.comp === item.comp &&
-        i.larg === item.larg &&
-        i.alt === item.alt &&
-        i.peso === item.peso,
-    );
-
-    if (existente) {
-      existente.qtd += item.qtd;
-    } else {
-      agrupados.push({ ...item });
-    }
-  });
-
-  return agrupados;
 }
 
 function dividirItensQueExcedemMaiorVeiculo(listaCarga) {
@@ -879,7 +832,7 @@ function dividirItensQueExcedemMaiorVeiculo(listaCarga) {
   return novaLista;
 }
 
-function planejarFrotaAntiga(listaCarga, veiculoSelecionado = null) {
+function planejarFrotaFracionada(listaCarga, veiculoSelecionado = null) {
   const frota = [];
 
   listaCarga = dividirItensQueExcedemMaiorVeiculo(listaCarga);
@@ -1149,15 +1102,6 @@ function planejarFrota(listaCarga, veiculoSelecionado = null) {
     viagem.maiorLargura = maiorLarg;
     viagem.maiorAltura = maiorAlt;
 
-    console.log(
-      "Frota - carga completa mantida no veículo selecionado:",
-      {
-        veiculo: veiculoSelecionado.nome,
-        pesoTotal,
-        volumeTotal,
-      },
-    );
-
     return [viagem];
   }
 
@@ -1248,40 +1192,6 @@ if (
       break;
     }
   }
-
-  if (veiculoAlternativo) {
-    console.log(
-      "C3 - veículo alterado por margem operacional:",
-      {
-        veiculoOriginal:
-          veiculoParaCargaCompleta.nome,
-
-        ocupacaoOriginalPercentual:
-          Number(
-            (
-              (pesoTotal /
-                veiculoParaCargaCompleta.pesoMax) *
-              100
-            ).toFixed(2),
-          ),
-
-        veiculoAlternativo:
-          veiculoAlternativo.nome,
-
-        ocupacaoAlternativaPercentual:
-          Number(
-            (
-              (pesoTotal /
-                veiculoAlternativo.pesoMax) *
-              100
-            ).toFixed(2),
-          ),
-      },
-    );
-
-    veiculoParaCargaCompleta =
-      veiculoAlternativo;
-  }
 }
 
   const cargaCompletaCabe =
@@ -1314,99 +1224,10 @@ if (
     return [viagem];
   }
 
-  return planejarFrotaAntiga(
+  return planejarFrotaFracionada(
     listaCarga,
     veiculoSelecionado,
   );
-}
-
-function distribuirCargaEmVeiculos(listaCarga) {
-  let pendentes = [...listaCarga];
-
-  pendentes.sort((a, b) => {
-    const areaA = a.comp * a.larg;
-    const areaB = b.comp * b.larg;
-
-    if (areaB !== areaA) return areaB - areaA;
-    if (b.peso !== a.peso) return b.peso - a.peso;
-
-    return b.alt - a.alt;
-  });
-
-  const resultado = [];
-
-  while (pendentes.length > 0) {
-    const primeiro = pendentes[0];
-
-    const pesoPrimeiro = primeiro.peso * primeiro.qtd;
-
-    const volumePrimeiro =
-      primeiro.comp * primeiro.larg * primeiro.alt * primeiro.qtd;
-
-    const veiculo = escolherVeiculoIdeal(
-  pesoPrimeiro,
-  volumePrimeiro,
-  primeiro.comp,
-  primeiro.larg,
-  primeiro.alt,
-  [primeiro],
-);
-
-    let pesoAtual = 0;
-    let volumeAtual = 0;
-    let areaAtual = 0;
-
-    const carga = [];
-    const restantes = [];
-
-    pendentes.forEach((item) => {
-      const pesoItem = item.peso * item.qtd;
-
-      const volumeItem = item.comp * item.larg * item.alt * item.qtd;
-      const areaItem = item.comp * item.larg * item.qtd;
-
-      const cabePeso = pesoAtual + pesoItem <= veiculo.pesoMax;
-
-      const cabeVolume = volumeAtual + volumeItem <= veiculo.volMax;
-
-      const cabeComprimento = item.comp <= veiculo.compFisico;
-
-      const cabeLargura = item.larg <= veiculo.largFisica;
-
-      const cabeAltura = item.alt <= veiculo.altFisica;
-
-      const areaMaxVeiculo = veiculo.compFisico * veiculo.largFisica;
-
-      const cabeArea = areaAtual + areaItem <= areaMaxVeiculo;
-
-      if (
-        cabePeso &&
-        cabeVolume &&
-        cabeArea &&
-        cabeComprimento &&
-        cabeLargura &&
-        cabeAltura
-      ) {
-        carga.push(item);
-
-        pesoAtual += pesoItem;
-        volumeAtual += volumeItem;
-        areaAtual += areaItem;
-      } else {
-        restantes.push(item);
-      }
-    });
-
-    resultado.push({
-      veiculo: veiculo,
-
-      itens: carga,
-    });
-
-    pendentes = restantes;
-  }
-
-  return resultado;
 }
 
 // =====================================================
@@ -1631,18 +1452,10 @@ function calcularCarga() {
       qtdConjuntos: qtdConjuntosPersonalizados,
     };
 
-      console.log("Qtd. Conjuntos:", vSelecionado.qtdConjuntos);
-
     indexSel = -1;
   } else {
     vSelecionado = dbVeiculos[indexSel];
   }
-
-  // DEBUG: Cole isso logo após o vSelecionado ser definido
-  console.log("Veículo Selecionado:", vSelecionado);
-  console.log("Comprimento Físico:", vSelecionado.compFisico);
-  console.log("Largura Física:", vSelecionado.largFisica);
-  console.log("Altura Física:", vSelecionado.altFisica);
 
   lines.forEach((linha, index) => {
     try {
@@ -2392,6 +2205,330 @@ function posicionarCaixaComAET(caixa, veiculo) {
 const LIMITE_PESO_NORMAL = 0.90;
 const LIMITE_PESO_ATENCAO = 0.95;
 
+// =====================================================
+// LEGENDA AGRUPADA POR ITEM
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// só monta a legenda visual, não participa de nenhum
+// cálculo de peso, encaixe ou centro de gravidade.
+// =====================================================
+
+function renderizarLegendaAgrupada(itens, legendaContainer) {
+  const itensLegenda = Object.values(
+    itens.reduce((agrupados, item) => {
+      const chave =
+        `${item.id}|${item.nome}|${item.comp}|${item.larg}|${item.alt}`;
+
+      if (!agrupados[chave]) {
+        agrupados[chave] = {
+          ...item,
+          qtd: 0,
+        };
+      }
+
+      agrupados[chave].qtd += Number(item.qtd) || 0;
+
+      return agrupados;
+    }, {})
+  );
+
+  itensLegenda.forEach((item) => {
+    legendaContainer.innerHTML += `
+      <div class="legenda-item">
+          <div
+            class="legenda-cor"
+            style="background-color: ${item.cor};"
+          ></div>
+
+          <span>
+              <strong>Item ${item.id}</strong>
+              &nbsp;
+              <b>${item.nome}</b>
+              &nbsp;
+              ${item.qtd}x
+              &nbsp;•&nbsp;
+              ${item.comp.toFixed(2)}m ×
+              ${item.larg.toFixed(2)}m
+          </span>
+      </div>
+    `;
+  });
+}
+
+// =====================================================
+// CABINE - REFERÊNCIA VISUAL
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// só desenha a cabine no mapa, não participa de
+// nenhum cálculo de peso, encaixe ou centro de gravidade.
+// =====================================================
+
+function desenharCabineReferencia(svgCima, offsetX, offsetY, alturaBauPixels) {
+  const grupoCabine = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "g"
+  );
+
+  grupoCabine.setAttribute(
+    "class",
+    "cabine-referencia-visual"
+  );
+
+  const larguraCabine = 85;
+
+  const alturaCabine =
+    Math.min(alturaBauPixels * 0.82, 135);
+
+  const cabineX =
+    offsetX - larguraCabine;
+
+  const cabineY =
+    offsetY +
+    (alturaBauPixels - alturaCabine) / 2;
+
+  const cabineCorpo = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "rect"
+  );
+
+  cabineCorpo.setAttribute("x", cabineX);
+  cabineCorpo.setAttribute("y", cabineY);
+  cabineCorpo.setAttribute("width", larguraCabine);
+  cabineCorpo.setAttribute("height", alturaCabine);
+  cabineCorpo.setAttribute("rx", "10");
+  cabineCorpo.setAttribute("ry", "10");
+  cabineCorpo.setAttribute("fill", "#e2e8f0");
+  cabineCorpo.setAttribute("stroke", "#475569");
+  cabineCorpo.setAttribute("stroke-width", "2");
+
+  grupoCabine.appendChild(cabineCorpo);
+
+  const cabineVidro = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "rect"
+  );
+
+  cabineVidro.setAttribute(
+    "x",
+    cabineX + 7
+  );
+
+  cabineVidro.setAttribute(
+    "y",
+    cabineY + 8
+  );
+
+  cabineVidro.setAttribute(
+    "width",
+    "12"
+  );
+
+  cabineVidro.setAttribute(
+    "height",
+    Math.max(alturaCabine - 16, 10)
+  );
+
+  cabineVidro.setAttribute("rx", "4");
+  cabineVidro.setAttribute("fill", "#94a3b8");
+
+  grupoCabine.appendChild(cabineVidro);
+
+  const tituloCabine = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "title"
+  );
+
+  tituloCabine.textContent =
+    "Cabine - referência visual de orientação. Não participa dos cálculos.";
+
+  grupoCabine.appendChild(tituloCabine);
+
+  svgCima.appendChild(grupoCabine);
+}
+
+// =====================================================
+// C4 - LINHA CENTRAL TRANSVERSAL
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// referência visual do centro da largura útil, não
+// participa de nenhum cálculo da carga.
+// =====================================================
+
+function desenharLinhaCentralTransversal(svgCima, offsetX, offsetY, larguraBauPixels, alturaBauPixels) {
+  const linhaCentralY =
+    offsetY + alturaBauPixels / 2;
+
+  const linhaCentral = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "line"
+  );
+
+  linhaCentral.setAttribute("x1", offsetX);
+  linhaCentral.setAttribute("y1", linhaCentralY);
+  linhaCentral.setAttribute("x2", offsetX + larguraBauPixels);
+  linhaCentral.setAttribute("y2", linhaCentralY);
+  linhaCentral.setAttribute("stroke", "#64748b");
+  linhaCentral.setAttribute("stroke-width", "1.5");
+  linhaCentral.setAttribute("stroke-dasharray", "8,6");
+  linhaCentral.setAttribute("opacity", "0.75");
+  linhaCentral.setAttribute("pointer-events", "none");
+
+  const tituloLinhaCentral = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "title"
+  );
+
+  tituloLinhaCentral.textContent =
+    "Linha central da largura útil do veículo";
+
+  linhaCentral.appendChild(tituloLinhaCentral);
+
+  svgCima.appendChild(linhaCentral);
+}
+
+// =====================================================
+// DESENHO DAS CAIXAS NO MAPA
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// só desenha os retângulos e textos das caixas já
+// posicionadas, não participa de nenhum cálculo de
+// peso, encaixe ou centro de gravidade.
+// =====================================================
+
+function desenharCaixasNoMapa(svgCima, caixasPosicionadas, veiculo, offsetX, offsetY, escalaGlobalX, escalaGlobalY) {
+  caixasPosicionadas.forEach((c) => {
+    let posX = offsetX + c.X_Fisico * escalaGlobalX;
+    let posY = offsetY + c.Y_Fisico * escalaGlobalY;
+    let widthPX = c.compRender * escalaGlobalX;
+    let heightPX = c.largRender * escalaGlobalY;
+
+    let rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", posX);
+    rect.setAttribute("y", posY);
+    rect.setAttribute("width", widthPX);
+    rect.setAttribute("height", heightPX);
+    rect.setAttribute("fill", c.cor);
+    rect.setAttribute("stroke", "#1f2937");
+    rect.setAttribute("stroke-width", "1.0");
+
+    if (c.X_Fisico + c.compRender > veiculo.compFisico) {
+      rect.setAttribute("stroke", "#dc2626");
+      rect.setAttribute("stroke-width", "2");
+    }
+
+    if (c.excessoAET) {
+  rect.setAttribute("stroke", "#f97316");
+  rect.setAttribute("stroke-width", "3");
+  rect.setAttribute("stroke-dasharray", "8,4");
+}
+
+    svgCima.appendChild(rect);
+
+    if (c.ehPallet) {
+      let textoIdentificador = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "text",
+      );
+      textoIdentificador.setAttribute("x", posX + widthPX / 2);
+      textoIdentificador.setAttribute("y", posY + heightPX / 2 - 2);
+      textoIdentificador.setAttribute("fill", "#ffffff");
+      textoIdentificador.setAttribute("font-size", "9px");
+      textoIdentificador.setAttribute("font-weight", "bold");
+      textoIdentificador.setAttribute("text-anchor", "middle");
+      textoIdentificador.textContent = c.textoTxt;
+      svgCima.appendChild(textoIdentificador);
+
+      if (widthPX > 28 && heightPX > 20) {
+        let textoMedidaPallet = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "text",
+        );
+        textoMedidaPallet.setAttribute("x", posX + widthPX / 2);
+        textoMedidaPallet.setAttribute("y", posY + heightPX / 2 + 8);
+        textoMedidaPallet.setAttribute("fill", "rgba(255,255,255,0.85)");
+        textoMedidaPallet.setAttribute("font-size", "8px");
+        textoMedidaPallet.setAttribute("text-anchor", "middle");
+        textoMedidaPallet.textContent = c.dimTexto;
+        svgCima.appendChild(textoMedidaPallet);
+      }
+    } else {
+      if (widthPX > 24 && heightPX > 18) {
+        let textoMedida = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "text",
+        );
+        let deslocamentoY = c.empilhados > 1 ? -4 : 3;
+
+        textoMedida.setAttribute("x", posX + widthPX / 2);
+        textoMedida.setAttribute("y", posY + heightPX / 2 + deslocamentoY);
+        textoMedida.setAttribute("fill", "#ffffff");
+        textoMedida.setAttribute("font-size", "8.5px");
+        textoMedida.setAttribute("font-weight", "normal");
+        textoMedida.setAttribute("text-anchor", "middle");
+        textoMedida.textContent = c.dimTexto;
+        svgCima.appendChild(textoMedida);
+      }
+
+if (c.empilhados > 1) {
+
+  let textoQtd = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "text",
+  );
+
+  textoQtd.setAttribute(
+    "x",
+    posX + widthPX / 2
+  );
+
+  textoQtd.setAttribute(
+    "y",
+    posY + heightPX / 2 + 7
+  );
+
+  textoQtd.setAttribute(
+    "fill",
+    "#ffffff"
+  );
+
+  textoQtd.setAttribute(
+    "font-size",
+    "9px"
+  );
+
+  textoQtd.setAttribute(
+    "font-weight",
+    "bold"
+  );
+
+  textoQtd.setAttribute(
+    "text-anchor",
+    "middle"
+  );
+
+  const idsDaPilha =
+    Array.isArray(c.unidades)
+      ? new Set(
+          c.unidades.map(
+            (unidade) => unidade.id
+          )
+        )
+      : new Set();
+
+  const pilhaComposta =
+    idsDaPilha.size > 1;
+
+  textoQtd.textContent =
+    pilhaComposta
+      ? `${c.empilhados} ITENS`
+      : `${c.empilhados}x`;
+
+  svgCima.appendChild(textoQtd);
+}
+    }
+  });
+}
+
 function renderizarArrumacaoLogica(
   veiculo,
   itens,
@@ -2428,49 +2565,7 @@ function renderizarArrumacaoLogica(
 
   let caixasIndividuais = [];
 
-// =====================================================
-// LEGENDA AGRUPADA POR ITEM
-// =====================================================
-
-const itensLegenda = Object.values(
-  itens.reduce((agrupados, item) => {
-    const chave =
-      `${item.id}|${item.nome}|${item.comp}|${item.larg}|${item.alt}`;
-
-    if (!agrupados[chave]) {
-      agrupados[chave] = {
-        ...item,
-        qtd: 0,
-      };
-    }
-
-    agrupados[chave].qtd += Number(item.qtd) || 0;
-
-    return agrupados;
-  }, {})
-);
-
-itensLegenda.forEach((item) => {
-  legendaContainer.innerHTML += `
-    <div class="legenda-item">
-        <div
-          class="legenda-cor"
-          style="background-color: ${item.cor};"
-        ></div>
-
-        <span>
-            <strong>Item ${item.id}</strong>
-            &nbsp;
-            <b>${item.nome}</b>
-            &nbsp;
-            ${item.qtd}x
-            &nbsp;•&nbsp;
-            ${item.comp.toFixed(2)}m ×
-            ${item.larg.toFixed(2)}m
-        </span>
-    </div>
-  `;
-});
+renderizarLegendaAgrupada(itens, legendaContainer);
 
 // =====================================================
 // PILHAS FÍSICAS COMPOSTAS
@@ -2720,32 +2815,6 @@ caixasIndividuais.forEach((caixa) => {
   caixa.ehCargaPesada =
     caixa.pesoBloco >= limiteCargaPesada;
 });
-
-console.group("C3 — Classificação operacional");
-
-console.log(
-  "Limite para carga pesada:",
-  Number(limiteCargaPesada.toFixed(2)),
-  "kg"
-);
-
-console.log("Zona estimada dos eixos:", {
-  inicioMetros: Number(inicioZonaEixos.toFixed(2)),
-  fimMetros: Number(fimZonaEixos.toFixed(2)),
-  centroMetros: Number(centroZonaEixos.toFixed(2)),
-});
-
-caixasIndividuais.forEach((caixa) => {
-  console.log({
-    item: caixa.nome,
-    pesoBlocoKg: caixa.pesoBloco,
-    classificacao: caixa.ehCargaPesada
-      ? "PESADA — priorizar região dos eixos"
-      : "LEVE — distribuir entre frente e traseira",
-  });
-});
-
-// console.groupEnd();
 
 let espaçosLivres = [
   {
@@ -3500,11 +3569,7 @@ if (globalEstorouMetragem) {
     tentarArrumacaoCompacta(caixasIndividuais);
 
   if (arrumacaoFallback) {
-    console.log(
-      "C3 — distribuição por peso não encontrou encaixe. Aplicado fallback físico.",
-    );
-
-caixasPosicionadas = arrumacaoFallback;
+    caixasPosicionadas = arrumacaoFallback;
 globalEstorouMetragem = false;
 globalItensExcedentes = [];
 
@@ -3631,20 +3696,6 @@ const deslocamentoX = Math.max(
 const deslocamentoY =
   (veiculo.largFisica - larguraOcupada) / 2 - menorY;
 
-console.log("C3 — ajuste final pelo CG:", {
-  cgAntesMetros:
-    Number(cgAtualX.toFixed(2)),
-
-  alvoMetros:
-    Number(centroZonaEixos.toFixed(2)),
-
-  deslocamentoIdealMetros:
-    Number(deslocamentoIdealX.toFixed(2)),
-
-  deslocamentoAplicadoMetros:
-    Number(deslocamentoX.toFixed(2)),
-});
-
 caixasDentroDoVeiculo.forEach((caixa) => {
   caixa.X_Fisico += deslocamentoX;
   caixa.Y_Fisico += deslocamentoY;
@@ -3660,63 +3711,9 @@ caixasDentroDoVeiculo.forEach((caixa) => {
 
   let pesoTotalBlocos = 0;
 
-  caixasPosicionadas.forEach((caixa, index) => {
+  caixasPosicionadas.forEach((caixa) => {
     pesoTotalBlocos += caixa.pesoBloco;
-
-console.log(`Bloco ${index + 1}`, {
-  item: caixa.nome,
-  id: caixa.id,
-
-  quantidadeEmpilhada:
-    caixa.empilhados,
-
-  alturaTotalMetros:
-    Number(
-      (caixa.alturaTotal || 0).toFixed(2)
-    ),
-
-  composicaoPilha:
-    Array.isArray(caixa.unidades)
-      ? caixa.unidades.map((unidade) => ({
-          id: unidade.id,
-          nome: unidade.nome,
-          alturaMetros:
-            Number(
-              (unidade.alt || 0).toFixed(2)
-            ),
-          pesoKg: unidade.peso,
-        }))
-      : [],
-
-  pesoUnitarioKg:
-    caixa.pesoUnitario,
-
-  pesoBlocoKg:
-    caixa.pesoBloco,
-
-  posicaoXMetros:
-    Number(
-      caixa.X_Fisico.toFixed(2)
-    ),
-
-  posicaoYMetros:
-    Number(
-      caixa.Y_Fisico.toFixed(2)
-    ),
-
-  comprimentoMetros:
-    Number(
-      caixa.compRender.toFixed(2)
-    ),
-
-  larguraMetros:
-    Number(
-      caixa.largRender.toFixed(2)
-    ),
-});
   });
-
-    console.log("Peso total dos blocos:", pesoTotalBlocos, "kg");
 
   // =====================================================
   // C3 - CÁLCULO DO CENTRO DE GRAVIDADE
@@ -3744,20 +3741,6 @@ console.log(`Bloco ${index + 1}`, {
     centroGravidadeY = somaMomentoY / pesoTotalBlocos;
   }
 
-  // console.group("Centro de Gravidade");
-
-  console.log(
-    "CG longitudinal (X):",
-    Number(centroGravidadeX.toFixed(2)),
-    "m"
-  );
-
-  console.log(
-    "CG lateral (Y):",
-    Number(centroGravidadeY.toFixed(2)),
-    "m"
-  );
-  
 // =====================================================
 // C4 - ANÁLISE TRANSVERSAL / LATERAL
 // Diagnóstico experimental
@@ -3788,39 +3771,6 @@ if (desvioLateralMetros < -0.01) {
   ladoDesvioLateral = "DIREITA";
 }
 
-console.group("C4 - análise transversal")
-
-console.log(
-  "CG lateral:",
-  Number(centroGravidadeY.toFixed(2)),
-  "m"
-);
-
-console.log(
-  "Centro lateral do veículo:",
-  Number(centroLateralVeiculo.toFixed(2)),
-  "m"
-);
-
-console.log(
-  "Desvio lateral:",
-  Number(desvioLateralAbsoluto.toFixed(2)),
-  "m"
-);
-
-console.log(
-  "Desvio relativo:",
-  Number(desvioLateralPercentual.toFixed(2)),
-  "%"
-);
-
-console.log(
-  "Lado:",
-  ladoDesvioLateral
-);
-
-console.groupEnd();
-
 // =====================================================
 // C4 - CLASSIFICAÇÃO OPERACIONAL TRANSVERSAL
 // Critério interno de triagem matemática do DCPRO
@@ -3843,23 +3793,6 @@ if (desvioLateralPercentual <= 10) {
     "CRÍTICO - concentração lateral significativamente afastada da região central";
 }
 
-console.log(
-  "C4 - classificação transversal:",
-  {
-    desvioPercentual:
-      Number(desvioLateralPercentual.toFixed(2)),
-
-    lado:
-      ladoDesvioLateral,
-
-    nivel:
-      nivelTransversalCg,
-
-    classificacao:
-      classificacaoTransversalCg,
-  },
-);
-
 // C4 - mensagem operacional da análise transversal
 let mensagemTransversalCg = null;
 
@@ -3881,11 +3814,6 @@ if (nivelTransversalCg === "atencao") {
       "Recomenda-se revisar a disposição da carga antes de prosseguir.",
   };
 }
-
-console.log(
-  "C4 - mensagem operacional transversal:",
-  mensagemTransversalCg,
-);
 
 mensagemTransversalCgAtual = mensagemTransversalCg;
 
@@ -3923,32 +3851,6 @@ if (diferencaCgEixos <= 0.5) {
   nivelCg = "critico";
 }
 
-console.log(
-  "C3 - avaliação do CG:",
-  {
-    cgLongitudinalMetros:
-  Number(
-    centroGravidadeX.toFixed(2),
-  ),
-
-    alvoEixosMetros:
-      Number(
-        centroZonaEixos.toFixed(2),
-      ),
-
-    diferencaMetros:
-      Number(
-        diferencaCgEixos.toFixed(2),
-      ),
-
-    nivel:
-      nivelCg,
-
-    classificacao:
-      classificacaoCg,
-  },
-);
-
 // =====================================================
 // C4 - ANÁLISE LONGITUDINAL DA POSIÇÃO DO CG
 // =====================================================
@@ -3973,26 +3875,6 @@ if (percentualPosicaoCg < 33.33) {
     "Concentração de peso com tendência para a região traseira";
 }
 
-console.log(
-  "C4 - análise longitudinal:",
-  {
-    posicaoCgMetros:
-      Number(centroGravidadeX.toFixed(2)),
-
-    comprimentoUtilMetros:
-      Number(veiculo.compFisico.toFixed(2)),
-
-    posicaoPercentual:
-      Number(percentualPosicaoCg.toFixed(2)),
-
-    regiao:
-      regiaoLongitudinalCg,
-
-    tendencia:
-      tendenciaLongitudinalCg,
-  },
-);
-
 // =====================================================
 // C4 - ORIENTAÇÃO OPERACIONAL LONGITUDINAL
 // =====================================================
@@ -4014,11 +3896,6 @@ if (regiaoLongitudinalCg === "DIANTEIRA") {
       "A distribuição estimada apresenta maior concentração de peso na região traseira do espaço útil. Recomenda-se verificar o posicionamento da carga antes da operação.",
   };
 }
-
-console.log(
-  "C4 - orientação operacional:",
-  orientacaoLongitudinalCg,
-);
 
 orientacaoLongitudinalCgAtual =
   orientacaoLongitudinalCg;
@@ -4056,11 +3933,6 @@ if (nivelCg === "atencao") {
       "O centro de gravidade estimado ficou significativamente afastado da região ideal. Recomenda-se revisar a disposição da carga antes de prosseguir.",
   };
 }
-
-console.log(
-  "C3 - ressalva operacional do CG:",
-  ressalvaCg,
-);
 
 ressalvaCgAtual = ressalvaCg;
 
@@ -4112,32 +3984,6 @@ if (percentualPeso <= LIMITE_PESO_NORMAL) {
   classificacaoMargemPeso =
     "INCOMPATÍVEL - capacidade máxima de peso excedida";
 }
-
-console.log(
-  "C3 - margem operacional de peso:",
-  {
-    pesoTotalKg:
-      Number(
-        pesoTotalBlocos.toFixed(2),
-      ),
-
-    capacidadeMaximaKg:
-      Number(
-        veiculo.pesoMax.toFixed(2),
-      ),
-
-    ocupacaoPercentual:
-      Number(
-        (percentualPeso * 100).toFixed(2),
-      ),
-
-    nivel:
-      nivelMargemPeso,
-
-    classificacao:
-      classificacaoMargemPeso,
-  },
-);
 
 const diagnosticoCg = {
   pesoTotalKg:
@@ -4194,22 +4040,6 @@ const diagnosticoCg = {
     classificacaoCg,
 };
 
-console.log(
-  "C3 - diagnóstico operacional:",
-  diagnosticoCg,
-);
-
-  console.log(
-    "Centro geométrico do veículo:",
-    {
-      x: Number((veiculo.compFisico / 2).toFixed(2)),
-      y: Number((veiculo.largFisica / 2).toFixed(2)),
-    }
-  );
-
-  console.groupEnd();
-  console.groupEnd();
-
   let maiorX = larguraBauPixels;
 
 caixasPosicionadas.forEach((c) => {
@@ -4258,301 +4088,10 @@ let tamanhoFinalW = Math.max(
 
   svgCima.appendChild(bgRect);
 
-  // =====================================================
-// CABINE - REFERÊNCIA VISUAL
-// Não participa de nenhum cálculo da carga.
-// =====================================================
+  desenharLinhaCentralTransversal(svgCima, offsetX, offsetY, larguraBauPixels, alturaBauPixels);
+  desenharCabineReferencia(svgCima, offsetX, offsetY, alturaBauPixels);
 
-const grupoCabine = document.createElementNS(
-  "http://www.w3.org/2000/svg",
-  "g"
-);
-
-grupoCabine.setAttribute(
-  "class",
-  "cabine-referencia-visual"
-);
-
-const larguraCabine = 85;
-
-const alturaCabine =
-  Math.min(alturaBauPixels * 0.82, 135);
-
-const cabineX =
-  offsetX - larguraCabine;
-
-const cabineY =
-  offsetY +
-  (alturaBauPixels - alturaCabine) / 2;
-
-// Corpo da cabine
-const cabineCorpo = document.createElementNS(
-  "http://www.w3.org/2000/svg",
-  "rect"
-);
-
-cabineCorpo.setAttribute("x", cabineX);
-cabineCorpo.setAttribute("y", cabineY);
-cabineCorpo.setAttribute("width", larguraCabine);
-cabineCorpo.setAttribute("height", alturaCabine);
-cabineCorpo.setAttribute("rx", "10");
-cabineCorpo.setAttribute("ry", "10");
-cabineCorpo.setAttribute("fill", "#e2e8f0");
-cabineCorpo.setAttribute("stroke", "#475569");
-cabineCorpo.setAttribute("stroke-width", "2");
-
-grupoCabine.appendChild(cabineCorpo);
-
-// Para-brisa / indicação da frente
-const cabineVidro = document.createElementNS(
-  "http://www.w3.org/2000/svg",
-  "rect"
-);
-
-cabineVidro.setAttribute(
-  "x",
-  cabineX + 7
-);
-
-cabineVidro.setAttribute(
-  "y",
-  cabineY + 8
-);
-
-cabineVidro.setAttribute(
-  "width",
-  "12"
-);
-
-cabineVidro.setAttribute(
-  "height",
-  Math.max(alturaCabine - 16, 10)
-);
-
-cabineVidro.setAttribute("rx", "4");
-cabineVidro.setAttribute("fill", "#94a3b8");
-
-grupoCabine.appendChild(cabineVidro);
-
-// Tooltip explicativo
-const tituloCabine = document.createElementNS(
-  "http://www.w3.org/2000/svg",
-  "title"
-);
-
-tituloCabine.textContent =
-  "Cabine - referência visual de orientação. Não participa dos cálculos.";
-
-grupoCabine.appendChild(tituloCabine);
-
-// =====================================================
-// C4 - LINHA CENTRAL TRANSVERSAL
-// Referência visual do centro da largura útil.
-// Não participa dos cálculos da carga.
-// =====================================================
-
-const linhaCentralY =
-  offsetY + alturaBauPixels / 2;
-
-const linhaCentral = document.createElementNS(
-  "http://www.w3.org/2000/svg",
-  "line"
-);
-
-linhaCentral.setAttribute(
-  "x1",
-  offsetX
-);
-
-linhaCentral.setAttribute(
-  "y1",
-  linhaCentralY
-);
-
-linhaCentral.setAttribute(
-  "x2",
-  offsetX + larguraBauPixels
-);
-
-linhaCentral.setAttribute(
-  "y2",
-  linhaCentralY
-);
-
-linhaCentral.setAttribute(
-  "stroke",
-  "#64748b"
-);
-
-linhaCentral.setAttribute(
-  "stroke-width",
-  "1.5"
-);
-
-linhaCentral.setAttribute(
-  "stroke-dasharray",
-  "8,6"
-);
-
-linhaCentral.setAttribute(
-  "opacity",
-  "0.75"
-);
-
-linhaCentral.setAttribute(
-  "pointer-events",
-  "none"
-);
-
-const tituloLinhaCentral = document.createElementNS(
-  "http://www.w3.org/2000/svg",
-  "title"
-);
-
-tituloLinhaCentral.textContent =
-  "Linha central da largura útil do veículo";
-
-linhaCentral.appendChild(
-  tituloLinhaCentral
-);
-
-svgCima.appendChild(
-  linhaCentral
-);
-
-svgCima.appendChild(grupoCabine);
-
-  caixasPosicionadas.forEach((c) => {
-    let posX = offsetX + c.X_Fisico * escalaGlobalX;
-    let posY = offsetY + c.Y_Fisico * escalaGlobalY;
-    let widthPX = c.compRender * escalaGlobalX;
-    let heightPX = c.largRender * escalaGlobalY;
-
-    let rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", posX);
-    rect.setAttribute("y", posY);
-    rect.setAttribute("width", widthPX);
-    rect.setAttribute("height", heightPX);
-    rect.setAttribute("fill", c.cor);
-    rect.setAttribute("stroke", "#1f2937");
-    rect.setAttribute("stroke-width", "1.0");
-
-    if (c.X_Fisico + c.compRender > veiculo.compFisico) {
-      rect.setAttribute("stroke", "#dc2626");
-      rect.setAttribute("stroke-width", "2");
-    }
-
-    if (c.excessoAET) {
-  rect.setAttribute("stroke", "#f97316");
-  rect.setAttribute("stroke-width", "3");
-  rect.setAttribute("stroke-dasharray", "8,4");
-}
-
-    svgCima.appendChild(rect);
-
-    if (c.ehPallet) {
-      let textoIdentificador = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "text",
-      );
-      textoIdentificador.setAttribute("x", posX + widthPX / 2);
-      textoIdentificador.setAttribute("y", posY + heightPX / 2 - 2);
-      textoIdentificador.setAttribute("fill", "#ffffff");
-      textoIdentificador.setAttribute("font-size", "9px");
-      textoIdentificador.setAttribute("font-weight", "bold");
-      textoIdentificador.setAttribute("text-anchor", "middle");
-      textoIdentificador.textContent = c.textoTxt;
-      svgCima.appendChild(textoIdentificador);
-
-      if (widthPX > 28 && heightPX > 20) {
-        let textoMedidaPallet = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "text",
-        );
-        textoMedidaPallet.setAttribute("x", posX + widthPX / 2);
-        textoMedidaPallet.setAttribute("y", posY + heightPX / 2 + 8);
-        textoMedidaPallet.setAttribute("fill", "rgba(255,255,255,0.85)");
-        textoMedidaPallet.setAttribute("font-size", "8px");
-        textoMedidaPallet.setAttribute("text-anchor", "middle");
-        textoMedidaPallet.textContent = c.dimTexto;
-        svgCima.appendChild(textoMedidaPallet);
-      }
-    } else {
-      if (widthPX > 24 && heightPX > 18) {
-        let textoMedida = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "text",
-        );
-        let deslocamentoY = c.empilhados > 1 ? -4 : 3;
-
-        textoMedida.setAttribute("x", posX + widthPX / 2);
-        textoMedida.setAttribute("y", posY + heightPX / 2 + deslocamentoY);
-        textoMedida.setAttribute("fill", "#ffffff");
-        textoMedida.setAttribute("font-size", "8.5px");
-        textoMedida.setAttribute("font-weight", "normal");
-        textoMedida.setAttribute("text-anchor", "middle");
-        textoMedida.textContent = c.dimTexto;
-        svgCima.appendChild(textoMedida);
-      }
-
-if (c.empilhados > 1) {
-
-  let textoQtd = document.createElementNS(
-    "http://www.w3.org/2000/svg",
-    "text",
-  );
-
-  textoQtd.setAttribute(
-    "x",
-    posX + widthPX / 2
-  );
-
-  textoQtd.setAttribute(
-    "y",
-    posY + heightPX / 2 + 7
-  );
-
-  textoQtd.setAttribute(
-    "fill",
-    "#ffffff"
-  );
-
-  textoQtd.setAttribute(
-    "font-size",
-    "9px"
-  );
-
-  textoQtd.setAttribute(
-    "font-weight",
-    "bold"
-  );
-
-  textoQtd.setAttribute(
-    "text-anchor",
-    "middle"
-  );
-
-  const idsDaPilha =
-    Array.isArray(c.unidades)
-      ? new Set(
-          c.unidades.map(
-            (unidade) => unidade.id
-          )
-        )
-      : new Set();
-
-  const pilhaComposta =
-    idsDaPilha.size > 1;
-
-  textoQtd.textContent =
-    pilhaComposta
-      ? `${c.empilhados} ITENS`
-      : `${c.empilhados}x`;
-
-  svgCima.appendChild(textoQtd);
-}
-    }
-  });
+  desenharCaixasNoMapa(svgCima, caixasPosicionadas, veiculo, offsetX, offsetY, escalaGlobalX, escalaGlobalY);
 
   // =====================================================
   // C3 - CENTROS INTERNOS + PAINEL EXTERNO
