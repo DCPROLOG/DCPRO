@@ -10,7 +10,71 @@ Todas as alterações importantes do projeto **Dimensionador de Carga Pro (DCPRO
 
 **Data de início:** Julho/2026
 
----
+------------------------------------------------------------------------
+
+# Revisão Técnica e Refatoração — Setembro/2026
+
+**Data:** 06/09/2026\
+**Status:** Concluído (pendente apenas confirmação final de mobile em dispositivo real)
+
+## Added
+
+-   Adicionado botão de duplicar item na tabela de carga, copiando os
+    valores da linha original para uma nova linha logo abaixo.
+-   Implementado histórico de cálculos recentes (últimos 10), com
+    data/hora e veículo utilizado, acessível por um botão dedicado.
+-   Implementada validação visual por campo: campos individuais
+    inválidos agora recebem destaque (borda vermelha), além do aviso
+    geral já existente.
+-   Adicionada rolagem vertical na tabela de itens após 8 linhas
+    visíveis, com cabeçalho fixo, evitando crescimento indefinido da
+    página.
+-   Implementado modo de exibição em cartão para a tabela de itens em
+    telas de celular, evitando dependência de rolagem horizontal.
+
+## Changed
+
+-   Refatorada por completo a função de renderização do encaixe físico
+    (`renderizarArrumacaoLogica`), reduzida de mais de 2.100 linhas
+    para cerca de 150, com a lógica dividida em 10 funções
+    especializadas e testáveis (montagem de caixas, classificação de
+    peso, encaixe físico, ajuste de centro de gravidade, análises
+    transversal/longitudinal e renderização visual).
+-   Otimizada a renderização da legenda de itens, eliminando
+    reprocessamento desnecessário do DOM a cada item.
+-   Renomeada `planejarFrotaAntiga` para `planejarFrotaFracionada`,
+    refletindo seu papel real no fluxo atual (fallback de
+    fracionamento, não código legado).
+
+## Fixed
+
+-   **Corrigido bug crítico de fragmentação de frota**: a checagem de
+    "excesso lateral" em `encontrarVeiculoComArrumacao` liberava
+    veículos incompatíveis sempre que nenhum item excedia
+    comprimento/altura isoladamente, mesmo quando o motivo real de não
+    caber era falta de espaço agregado. Isso causava divisão da carga
+    em veículos menores do que o necessário.
+-   Corrigida inconsistência de parsing entre os campos de dimensão
+    (comprimento/largura/altura) e o campo de peso: os primeiros não
+    removiam o ponto como separador de milhar, causando cálculo
+    incorreto para valores digitados como, por exemplo, "1.350".
+-   Concluída a implementação do balanceamento lateral preditivo para
+    cargas leves, que estava calculada mas nunca aplicada à pontuação
+    de posicionamento.
+-   Corrigida checagem de peso/volume em
+    `dividirItensQueExcedemMaiorVeiculo`, que validava apenas encaixe
+    físico na guarda inicial.
+-   Removido código morto: `cargaCabeNoVeiculo`,
+    `expandirItensPorQuantidade`, `agruparItensPorId`,
+    `distribuirCargaEmVeiculos`, `obterLimiteOperacionalPeso`,
+    `estaDentroMargemOperacionalPeso`, `estimarComprimentoLinear`.
+-   Removido bloco de busca de veículo alternativo por margem
+    operacional em `planejarFrota`, que calculava um resultado nunca
+    aplicado.
+-   Removidos todos os `console.log` de depuração do fluxo de cálculo
+    principal.
+
+------------------------------------------------------------------------
 
 ## Sprint 1 — Correções Estruturais
 

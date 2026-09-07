@@ -115,6 +115,31 @@ function formatarBR(valor) {
 // INTERFACE (UI)
 // =====================================================
 
+document.querySelector("#tabela-carga tbody").addEventListener(
+  "keydown",
+  function (evento) {
+    const noCampoDePeso = evento.target.classList.contains("peso");
+
+    if (evento.key === "Enter" && noCampoDePeso) {
+      evento.preventDefault();
+
+      adicionarLinha();
+
+      const novaLinha = document.querySelector(
+        "#tabela-carga tbody tr:last-child",
+      );
+
+      const primeiroCampo = novaLinha
+        ? novaLinha.querySelector(".nome")
+        : null;
+
+      if (primeiroCampo) {
+        primeiroCampo.focus();
+      }
+    }
+  },
+);
+
 function atualizarLabelsEcores() {
   const lines = document.querySelectorAll("#tabela-carga tbody tr");
   lines.forEach((linha, index) => {
@@ -146,14 +171,21 @@ function adicionarLinha(salvar = true) {
   const novaLinha = tabela.insertRow();
 
   novaLinha.innerHTML = `
-        <td><span class="label-linha">Item</span></td>
-        <td><input type="text" placeholder="Ex: Caixa A" class="nome"></td>
-        <td><input type="number" class="qtd" value="1" min="1" oninput="validarNumeros(this)"></td>
-        <td><input type="text" class="comp" placeholder="CM" oninput="validarNumeros(this)"></td>
-        <td><input type="text" class="larg" placeholder="CM" oninput="validarNumeros(this)"></td>
-        <td><input type="text" class="alt" placeholder="CM" oninput="validarNumeros(this)"></td>
-        <td><input type="text" class="peso" placeholder="KG" oninput="validarNumeros(this)"></td>
-        <td>     <button class="btn-danger" onclick="deletarLinha(this)" title="Excluir item">         <i class="fa-solid fa-xmark"></i>     </button> </td>
+        <td data-label="Ref / Cor"><span class="label-linha">Item</span></td>
+        <td data-label="Identificação / Tipo"><input type="text" placeholder="Ex: Caixa A" class="nome"></td>
+        <td data-label="Qtd"><input type="number" class="qtd" value="1" min="1" oninput="validarNumeros(this)"></td>
+        <td data-label="Comprimento (cm)"><input type="text" class="comp" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td data-label="Largura (cm)"><input type="text" class="larg" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td data-label="Altura (cm)"><input type="text" class="alt" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td data-label="Peso Unit. (kg)"><input type="text" class="peso" placeholder="KG" oninput="validarNumeros(this)"></td>
+        <td data-label="Ação">
+          <button class="btn-duplicar" onclick="duplicarLinha(this)" title="Duplicar item">
+            <i class="fa-solid fa-copy"></i>
+          </button>
+          <button class="btn-danger" onclick="deletarLinha(this)" title="Excluir item">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </td>
     `;
 
   novaLinha.querySelectorAll("input").forEach((input) => {
@@ -174,6 +206,54 @@ function deletarLinha(botao) {
   salvarCarga();
 }
 
+function duplicarLinha(botao) {
+  const linhaAtual = botao.closest("tr");
+  const tabela = document
+    .getElementById("tabela-carga")
+    .getElementsByTagName("tbody")[0];
+
+  const indiceAtual = Array.from(tabela.rows).indexOf(linhaAtual);
+  const novaLinha = tabela.insertRow(indiceAtual + 1);
+
+  novaLinha.innerHTML = `
+        <td data-label="Ref / Cor"><span class="label-linha">Item</span></td>
+        <td data-label="Identificação / Tipo"><input type="text" placeholder="Ex: Caixa A" class="nome"></td>
+        <td data-label="Qtd"><input type="number" class="qtd" value="1" min="1" oninput="validarNumeros(this)"></td>
+        <td data-label="Comprimento (cm)"><input type="text" class="comp" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td data-label="Largura (cm)"><input type="text" class="larg" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td data-label="Altura (cm)"><input type="text" class="alt" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td data-label="Peso Unit. (kg)"><input type="text" class="peso" placeholder="KG" oninput="validarNumeros(this)"></td>
+        <td data-label="Ação">
+          <button class="btn-duplicar" onclick="duplicarLinha(this)" title="Duplicar item">
+            <i class="fa-solid fa-copy"></i>
+          </button>
+          <button class="btn-danger" onclick="deletarLinha(this)" title="Excluir item">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </td>
+    `;
+
+  novaLinha.querySelector(".nome").value =
+    linhaAtual.querySelector(".nome").value;
+  novaLinha.querySelector(".qtd").value =
+    linhaAtual.querySelector(".qtd").value;
+  novaLinha.querySelector(".comp").value =
+    linhaAtual.querySelector(".comp").value;
+  novaLinha.querySelector(".larg").value =
+    linhaAtual.querySelector(".larg").value;
+  novaLinha.querySelector(".alt").value =
+    linhaAtual.querySelector(".alt").value;
+  novaLinha.querySelector(".peso").value =
+    linhaAtual.querySelector(".peso").value;
+
+  novaLinha.querySelectorAll("input").forEach((input) => {
+    input.addEventListener("input", salvarCarga);
+  });
+
+  atualizarLabelsEcores();
+  salvarCarga();
+}
+
 // =====================================================
 // VALIDAÇÕES
 // =====================================================
@@ -191,19 +271,28 @@ function verificarItensIncompletos() {
     if (!qtdEl || !compEl || !largEl || !altEl || !pesoEl) return;
 
     const qtdVal = parseInt(qtdEl.value) || 0;
-    const compVal = parseFloat(compEl.value.replace(",", ".")) || 0;
-    const largVal = parseFloat(largEl.value.replace(",", ".")) || 0;
-    const altVal = parseFloat(altEl.value.replace(",", ".")) || 0;
+    const compVal =
+      parseFloat(compEl.value.replace(/\./g, "").replace(",", ".")) || 0;
+    const largVal =
+      parseFloat(largEl.value.replace(/\./g, "").replace(",", ".")) || 0;
+    const altVal =
+      parseFloat(altEl.value.replace(/\./g, "").replace(",", ".")) || 0;
     const pesoVal =
       Number(pesoEl.value.replace(/\./g, "").replace(",", ".")) || 0;
 
-    if (
-      qtdVal <= 0 ||
-      compVal <= 0 ||
-      largVal <= 0 ||
-      altVal <= 0 ||
-      pesoVal <= 0
-    ) {
+    const camposDaLinha = [
+      { el: qtdEl, valido: qtdVal > 0 },
+      { el: compEl, valido: compVal > 0 },
+      { el: largEl, valido: largVal > 0 },
+      { el: altEl, valido: altVal > 0 },
+      { el: pesoEl, valido: pesoVal > 0 },
+    ];
+
+    camposDaLinha.forEach(({ el, valido }) => {
+      el.classList.toggle("campo-invalido", !valido);
+    });
+
+    if (camposDaLinha.some(({ valido }) => !valido)) {
       incompleto = true;
     }
   });
@@ -220,63 +309,6 @@ function verificarItensIncompletos() {
 // =====================================================
 // CÁLCULOS
 // =====================================================
-
-function estimarComprimentoLinear(itens, veiculo) {
-  let comprimentoTotal = 0;
-
-  itens.forEach((item) => {
-    const nome = item.nome.toLowerCase();
-
-    const ehPalletOuBase =
-      nome.includes("pallet") ||
-      nome.includes("palete") ||
-      nome.includes("base");
-
-    let limiteEmpilhamento = item.alt <= 0.8 ? 3 : 2;
-
-    if (ehPalletOuBase) {
-      limiteEmpilhamento = 1;
-    }
-
-    let limiteFisico = Math.floor(veiculo.altFisica / item.alt);
-
-    if (limiteFisico < 1) {
-      limiteFisico = 1;
-    }
-
-    const maxEmpilhamento = Math.min(limiteEmpilhamento, limiteFisico);
-
-    const blocos = Math.ceil(item.qtd / maxEmpilhamento);
-
-    const porFileira = Math.max(1, Math.floor(veiculo.largFisica / item.larg));
-
-    const fileiras = Math.ceil(blocos / porFileira);
-
-    comprimentoTotal += fileiras * item.comp;
-  });
-
-  return comprimentoTotal;
-}
-
-// =====================================================
-// C3 — MARGEM OPERACIONAL DE PESO
-// =====================================================
-
-function obterLimiteOperacionalPeso(veiculo) {
-  if (!veiculo || !veiculo.pesoMax) {
-    return 0;
-  }
-
-  return veiculo.pesoMax * 0.95;
-}
-
-function estaDentroMargemOperacionalPeso(peso, veiculo) {
-  if (!veiculo || !veiculo.pesoMax) {
-    return false;
-  }
-
-  return peso < obterLimiteOperacionalPeso(veiculo);
-}
 
 function escolherVeiculoIdeal(
   peso,
@@ -529,39 +561,6 @@ itensAgrupados.forEach((grupo) => {
   return area;
 }
 
-function cargaCabeNoVeiculo(
-  peso,
-  volume,
-  maiorComp,
-  maiorLarg,
-  maiorAlt,
-  itens,
-  veiculo,
-) {
-  const volumeMaximo =
-    veiculo.compFisico * veiculo.largFisica * veiculo.altFisica;
-
-  const areaMaxima = veiculo.compFisico * veiculo.largFisica;
-
-  const areaPiso = calcularAreaPisoEstimada(itens, veiculo);
-
-  const comprimentoEstimado = estimarComprimentoLinear(itens, veiculo);
-
-  const larguraAceitaOperacionalmente =
-  maiorComp <= veiculo.compFisico &&
-  maiorLarg > veiculo.largFisica;
-
-  return (
-    peso <= veiculo.pesoMax &&
-    volume <= volumeMaximo &&
-    areaPiso <= areaMaxima * 0.95 &&
-    comprimentoEstimado <= veiculo.compFisico * 0.95 &&
-    maiorComp <= veiculo.compFisico &&
-    (maiorLarg <= veiculo.largFisica || larguraAceitaOperacionalmente) &&
-    maiorAlt <= veiculo.altFisica
-  );
-}
-
 function testarArrumacaoFisica(veiculo, itens) {
   let caixasIndividuais = [];
 
@@ -782,7 +781,14 @@ function dividirItensQueExcedemMaiorVeiculo(listaCarga) {
   const novaLista = [];
 
   listaCarga.forEach((item) => {
-    if (testarArrumacaoFisica(maiorVeiculo, [item])) {
+    const pesoTotalItem = item.peso * item.qtd;
+    const volumeTotalItem = item.comp * item.larg * item.alt * item.qtd;
+
+    if (
+      pesoTotalItem <= maiorVeiculo.pesoMax &&
+      volumeTotalItem <= maiorVeiculo.volMax &&
+      testarArrumacaoFisica(maiorVeiculo, [item])
+    ) {
       novaLista.push(item);
       return;
     }
@@ -1125,75 +1131,6 @@ function planejarFrota(listaCarga, veiculoSelecionado = null) {
     cargaAgrupada,
   );
 
-/*
-  C3 - BUSCA DE ALTERNATIVA POR MARGEM OPERACIONAL
-
-  Se a carga cabe fisicamente no veículo encontrado,
-  mas utiliza 95% ou mais da capacidade de peso,
-  procuramos um veículo maior que:
-
-  - comporte o peso nominalmente;
-  - comporte o volume;
-  - comporte fisicamente a carga;
-  - mantenha o peso abaixo de 95%.
-
-  Neste ponto ainda NÃO fracionamos a carga.
-*/
-
-if (
-  veiculoParaCargaCompleta &&
-  pesoTotal <= veiculoParaCargaCompleta.pesoMax &&
-  !estaDentroMargemOperacionalPeso(
-    pesoTotal,
-    veiculoParaCargaCompleta,
-  )
-) {
-  const indiceVeiculoAtual =
-    dbVeiculos.findIndex(
-      (veiculo) =>
-        veiculo.nome ===
-        veiculoParaCargaCompleta.nome,
-    );
-
-  let veiculoAlternativo = null;
-
-  for (
-    let i = indiceVeiculoAtual + 1;
-    i < dbVeiculos.length;
-    i++
-  ) {
-    const candidato = dbVeiculos[i];
-
-    const pesoOk =
-      pesoTotal <= candidato.pesoMax;
-
-    const volumeOk =
-      volumeTotal <= candidato.volMax;
-
-    const margemPesoOk =
-      estaDentroMargemOperacionalPeso(
-        pesoTotal,
-        candidato,
-      );
-
-    const arrumacaoOk =
-      testarArrumacaoFisica(
-        candidato,
-        cargaAgrupada,
-      );
-
-    if (
-      pesoOk &&
-      volumeOk &&
-      margemPesoOk &&
-      arrumacaoOk
-    ) {
-      veiculoAlternativo = candidato;
-      break;
-    }
-  }
-}
-
   const cargaCompletaCabe =
     veiculoParaCargaCompleta &&
     pesoTotal <= veiculoParaCargaCompleta.pesoMax &&
@@ -1402,6 +1339,8 @@ function calcularCarga() {
   return;
 }
 
+  salvarNoHistorico();
+
   let volTotal = 0,
     pesoTotal = 0;
   let itemEstouraDimensao = false;
@@ -1464,17 +1403,23 @@ function calcularCarga() {
 
       const comp =
         Math.max(
-          parseFloat(linha.querySelector(".comp").value.replace(",", ".")) || 0,
+          parseFloat(
+            linha.querySelector(".comp").value.replace(/\./g, "").replace(",", "."),
+          ) || 0,
           0,
         ) / 100;
       const larg =
         Math.max(
-          parseFloat(linha.querySelector(".larg").value.replace(",", ".")) || 0,
+          parseFloat(
+            linha.querySelector(".larg").value.replace(/\./g, "").replace(",", "."),
+          ) || 0,
           0,
         ) / 100;
       const alt =
         Math.max(
-          parseFloat(linha.querySelector(".alt").value.replace(",", ".")) || 0,
+          parseFloat(
+            linha.querySelector(".alt").value.replace(/\./g, "").replace(",", "."),
+          ) || 0,
           0,
         ) / 100;
 
@@ -1575,6 +1520,8 @@ let cargas = [];
 
     trocaAutomaticaVeiculo = false;
     alertaOperacionalAET = verificarAlertaAET(cargas);
+
+    const idsExcedentesAcumulados = new Set();
 
     cargas.forEach((carga, indice) => {
       const numero = indice + 1;
@@ -1696,42 +1643,24 @@ let cargas = [];
         barVolVeiculo.classList.add("fill-verde");
       }
 
-      // =====================================================
-// REAGRUPAR ITENS IGUAIS PARA O SVG E EMPILHAMENTO
-// =====================================================
-
-const itensAgrupadosParaSVG = Object.values(
-  carga.itens.reduce((agrupados, item) => {
-    const chave = [
-      item.id,
-      item.nome,
-      item.comp,
-      item.larg,
-      item.alt,
-      item.peso,
-      item.cor,
-    ].join("|");
-
-    if (!agrupados[chave]) {
-      agrupados[chave] = {
-        ...item,
-        qtd: 0,
-      };
-    }
-
-    agrupados[chave].qtd += Number(item.qtd) || 1;
-
-    return agrupados;
-  }, {})
-);
-
-renderizarArrumacaoLogica(
+      renderizarArrumacaoLogica(
   carga.veiculo,
   carga.itens,
   `svg-${numero}`,
   `legenda-${numero}`,
   `dimesoes-${numero}`,
 );
+
+      globalItensExcedentes.forEach((item) => {
+        idsExcedentesAcumulados.add(item.id);
+      });
+    });
+
+    document.querySelectorAll("#tabela-carga tbody tr").forEach((linha, index) => {
+      linha.classList.toggle(
+        "linha-excedente",
+        idsExcedentesAcumulados.has(index + 1),
+      );
     });
   } else {
     document.getElementById("bloco-mapa").style.display = "none";
@@ -2232,8 +2161,9 @@ function renderizarLegendaAgrupada(itens, legendaContainer) {
     }, {})
   );
 
-  itensLegenda.forEach((item) => {
-    legendaContainer.innerHTML += `
+  const htmlLegenda = itensLegenda
+    .map(
+      (item) => `
       <div class="legenda-item">
           <div
             class="legenda-cor"
@@ -2251,8 +2181,11 @@ function renderizarLegendaAgrupada(itens, legendaContainer) {
               ${item.larg.toFixed(2)}m
           </span>
       </div>
-    `;
-  });
+    `,
+    )
+    .join("");
+
+  legendaContainer.innerHTML += htmlLegenda;
 }
 
 // =====================================================
@@ -2529,108 +2462,552 @@ if (c.empilhados > 1) {
   });
 }
 
-function renderizarArrumacaoLogica(
-  veiculo,
-  itens,
-  svgID,
-  legendaID,
-  dimensaoID,
-) {
-  const svgCima = document.getElementById(svgID);
+// =====================================================
+// PAINEL DE COMPARAÇÃO DO CENTRO DE GRAVIDADE
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// só desenha os pontos de CG/centro do veículo e o
+// painel de texto, não participa de nenhum cálculo.
+// =====================================================
 
-  const legendaContainer = document.getElementById(legendaID);
+function desenharPainelComparacaoCG(svgCima, pesoTotalBlocos, centroGravidadeX, centroGravidadeY, veiculo, offsetX, offsetY, alturaBauPixels, larguraBauPixels, escalaGlobalX, escalaGlobalY) {
+  if (pesoTotalBlocos > 0) {
+    const cgPixelX =
+      offsetX + centroGravidadeX * escalaGlobalX;
 
-  const txtDimensoes = document.getElementById(dimensaoID);
+    const cgPixelY =
+      offsetY + centroGravidadeY * escalaGlobalY;
 
-  svgCima.innerHTML = "";
-  legendaContainer.innerHTML = "";
-  globalEstorouMetragem = false;
-  globalItensExcedentes = [];
+    const centroVeiculoPixelX =
+      offsetX + (veiculo.compFisico / 2) * escalaGlobalX;
 
-  const larguraMaximaCanvasGeral = 900;
-  const alturaCanvasGeral = 280;
-  const margemBorda = 14;
+    const centroVeiculoPixelY =
+      offsetY + (veiculo.largFisica / 2) * escalaGlobalY;
 
-  const comprimentoReferenciaVisual = 13.5;
-  const larguraReferenciaVisual = 2.45;
+    const grupoComparacao = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "g"
+    );
 
-  const escalaGlobalX =
-    (larguraMaximaCanvasGeral - margemBorda * 2) / comprimentoReferenciaVisual;
+    grupoComparacao.setAttribute(
+      "class",
+      "comparacao-centro-gravidade"
+    );
 
-  const escalaGlobalY =
-    (alturaCanvasGeral - margemBorda * 2) / larguraReferenciaVisual;
+    const linhaDeslocamento = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "line"
+    );
 
-  let larguraBauPixels = veiculo.compFisico * escalaGlobalX;
-  let alturaBauPixels = veiculo.largFisica * escalaGlobalY;
+    linhaDeslocamento.setAttribute("x1", centroVeiculoPixelX);
+    linhaDeslocamento.setAttribute("y1", centroVeiculoPixelY);
+    linhaDeslocamento.setAttribute("x2", cgPixelX);
+    linhaDeslocamento.setAttribute("y2", cgPixelY);
+    linhaDeslocamento.setAttribute("stroke", "#64748b");
+    linhaDeslocamento.setAttribute("stroke-width", "1.5");
+    linhaDeslocamento.setAttribute("stroke-dasharray", "4 4");
+    linhaDeslocamento.setAttribute("opacity", "0.7");
 
-  let caixasIndividuais = [];
+    grupoComparacao.appendChild(linhaDeslocamento);
 
-renderizarLegendaAgrupada(itens, legendaContainer);
+    const pontoCentroVeiculo = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "circle"
+    );
+
+    pontoCentroVeiculo.setAttribute("cx", centroVeiculoPixelX);
+    pontoCentroVeiculo.setAttribute("cy", centroVeiculoPixelY);
+    pontoCentroVeiculo.setAttribute("r", "4");
+    pontoCentroVeiculo.setAttribute("fill", "#2563eb");
+    pontoCentroVeiculo.setAttribute("stroke", "#ffffff");
+    pontoCentroVeiculo.setAttribute("stroke-width", "1.5");
+
+    grupoComparacao.appendChild(pontoCentroVeiculo);
+
+    const tituloCentroVeiculo = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "title"
+    );
+
+    tituloCentroVeiculo.textContent =
+      `Centro geométrico do veículo: ` +
+      `X ${(veiculo.compFisico / 2).toFixed(2)} m | ` +
+      `Y ${(veiculo.largFisica / 2).toFixed(2)} m`;
+
+    pontoCentroVeiculo.appendChild(tituloCentroVeiculo);
+
+    const pontoCG = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "circle"
+    );
+
+    pontoCG.setAttribute("cx", cgPixelX);
+    pontoCG.setAttribute("cy", cgPixelY);
+    pontoCG.setAttribute("r", "4");
+    pontoCG.setAttribute("fill", "#dc2626");
+    pontoCG.setAttribute("stroke", "#ffffff");
+    pontoCG.setAttribute("stroke-width", "1.5");
+
+    grupoComparacao.appendChild(pontoCG);
+
+    const tituloCG = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "title"
+    );
+
+    tituloCG.textContent =
+      `Centro de gravidade da carga: ` +
+      `X ${centroGravidadeX.toFixed(2)} m | ` +
+      `Y ${centroGravidadeY.toFixed(2)} m`;
+
+    pontoCG.appendChild(tituloCG);
+
+    const painelX = offsetX;
+    const painelY = offsetY + alturaBauPixels + 22;
+    const painelLargura = Math.max(larguraBauPixels, 260);
+    const painelAltura = 48;
+
+    const fundoPainel = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "rect"
+    );
+
+    fundoPainel.setAttribute("x", painelX);
+    fundoPainel.setAttribute("y", painelY);
+    fundoPainel.setAttribute("width", painelLargura);
+    fundoPainel.setAttribute("height", painelAltura);
+    fundoPainel.setAttribute("rx", "7");
+    fundoPainel.setAttribute("fill", "#f8fafc");
+    fundoPainel.setAttribute("stroke", "#cbd5e1");
+    fundoPainel.setAttribute("stroke-width", "1");
+
+    grupoComparacao.appendChild(fundoPainel);
+
+    const linhaGuiaCG = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "line"
+    );
+
+    linhaGuiaCG.setAttribute("x1", cgPixelX);
+    linhaGuiaCG.setAttribute("y1", cgPixelY + 6);
+    linhaGuiaCG.setAttribute("x2", cgPixelX);
+    linhaGuiaCG.setAttribute("y2", painelY);
+    linhaGuiaCG.setAttribute("stroke", "#dc2626");
+    linhaGuiaCG.setAttribute("stroke-width", "1.5");
+    linhaGuiaCG.setAttribute("stroke-dasharray", "3 3");
+    linhaGuiaCG.setAttribute("opacity", "0.7");
+
+    grupoComparacao.appendChild(linhaGuiaCG);
+
+    const textoCentroVeiculo = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "text"
+    );
+
+    textoCentroVeiculo.setAttribute("x", painelX + 12);
+    textoCentroVeiculo.setAttribute("y", painelY + 19);
+    textoCentroVeiculo.setAttribute("font-size", "10");
+    textoCentroVeiculo.setAttribute("font-weight", "700");
+    textoCentroVeiculo.setAttribute("fill", "#2563eb");
+
+    textoCentroVeiculo.textContent =
+      `● Centro do veículo: X ${(veiculo.compFisico / 2).toFixed(2)} m | ` +
+      `Y ${(veiculo.largFisica / 2).toFixed(2)} m`;
+
+    grupoComparacao.appendChild(textoCentroVeiculo);
+
+    const textoCG = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "text"
+    );
+
+    textoCG.setAttribute("x", painelX + 12);
+    textoCG.setAttribute("y", painelY + 37);
+    textoCG.setAttribute("font-size", "10");
+    textoCG.setAttribute("font-weight", "700");
+    textoCG.setAttribute("fill", "#dc2626");
+
+    textoCG.textContent =
+      `● CG da carga: X ${centroGravidadeX.toFixed(2)} m | ` +
+      `Y ${centroGravidadeY.toFixed(2)} m`;
+
+    grupoComparacao.appendChild(textoCG);
+
+    svgCima.appendChild(grupoComparacao);
+  }
+}
+
+// =====================================================
+// C4 - ANÁLISE TRANSVERSAL / LATERAL + CLASSIFICAÇÃO
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// calcula o desvio lateral do CG em relação ao centro
+// do veículo e classifica o nível de atenção operacional.
+// Retorna a mensagem de alerta (ou null se estiver adequado).
+// =====================================================
+
+function calcularAnaliseTransversalCg(centroGravidadeY, veiculo) {
+  const centroLateralVeiculo =
+    veiculo.largFisica / 2;
+
+  const desvioLateralMetros =
+    centroGravidadeY - centroLateralVeiculo;
+
+  const desvioLateralAbsoluto =
+    Math.abs(desvioLateralMetros);
+
+  const meiaLarguraUtil =
+    veiculo.largFisica / 2;
+
+  const desvioLateralPercentual =
+    meiaLarguraUtil > 0
+      ? (desvioLateralAbsoluto / meiaLarguraUtil) * 100
+      : 0;
+
+  let ladoDesvioLateral = "CENTRAL";
+
+  if (desvioLateralMetros < -0.01) {
+    ladoDesvioLateral = "ESQUERDA";
+  } else if (desvioLateralMetros > 0.01) {
+    ladoDesvioLateral = "DIREITA";
+  }
+
+  let nivelTransversalCg = "";
+  let classificacaoTransversalCg = "";
+
+  if (desvioLateralPercentual <= 10) {
+    nivelTransversalCg = "adequado";
+    classificacaoTransversalCg =
+      "ADEQUADO - distribuição lateral próxima do centro";
+  } else if (desvioLateralPercentual <= 25) {
+    nivelTransversalCg = "atencao";
+    classificacaoTransversalCg =
+      "ATENÇÃO - concentração lateral afastada da região central";
+  } else {
+    nivelTransversalCg = "critico";
+    classificacaoTransversalCg =
+      "CRÍTICO - concentração lateral significativamente afastada da região central";
+  }
+
+  let mensagemTransversalCg = null;
+
+  if (nivelTransversalCg === "atencao") {
+    mensagemTransversalCg = {
+      nivel: "atencao",
+      titulo: "ATENÇÃO À DISTRIBUIÇÃO LATERAL DA CARGA",
+      mensagem:
+        `A distribuição estimada da carga apresenta concentração lateral para o lado ${ladoDesvioLateral.toLowerCase()}. ` +
+        "Recomenda-se revisar o posicionamento da carga antes da operação.",
+    };
+  } else if (nivelTransversalCg === "critico") {
+    mensagemTransversalCg = {
+      nivel: "critico",
+      titulo: "DISTRIBUIÇÃO LATERAL CRÍTICA DA CARGA",
+      mensagem:
+        `A distribuição estimada da carga apresenta concentração lateral significativa para o lado ${ladoDesvioLateral.toLowerCase()}. ` +
+        "Recomenda-se revisar a disposição da carga antes de prosseguir.",
+    };
+  }
+
+  return mensagemTransversalCg;
+}
+
+// =====================================================
+// C3/C4 - CLASSIFICAÇÃO E ORIENTAÇÃO LONGITUDINAL DO CG
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// classifica o CG em relação à região dos eixos e à
+// posição longitudinal no veículo, e monta as mensagens
+// de orientação/ressalva operacional correspondentes.
+// =====================================================
+
+function calcularAnaliseLongitudinalCg(centroGravidadeX, centroZonaEixos, veiculo) {
+  const diferencaCgEixos =
+    Math.abs(
+      centroGravidadeX - centroZonaEixos,
+    );
+
+  let classificacaoCg = "";
+  let nivelCg = "";
+
+  if (diferencaCgEixos <= 0.5) {
+    classificacaoCg =
+      "ADEQUADO - CG próximo da região dos eixos";
+
+    nivelCg = "adequado";
+  } else if (diferencaCgEixos <= 1) {
+    classificacaoCg =
+      "ATENÇÃO - CG afastado da região ideal";
+
+    nivelCg = "atencao";
+  } else {
+    classificacaoCg =
+      "CRÍTICO - revisar distribuição da carga";
+
+    nivelCg = "critico";
+  }
+
+  const percentualPosicaoCg =
+    (centroGravidadeX / veiculo.compFisico) * 100;
+
+  let regiaoLongitudinalCg = "";
+  let tendenciaLongitudinalCg = "";
+
+  if (percentualPosicaoCg < 33.33) {
+    regiaoLongitudinalCg = "DIANTEIRA";
+    tendenciaLongitudinalCg =
+      "Concentração de peso com tendência para a região dianteira";
+  } else if (percentualPosicaoCg <= 66.66) {
+    regiaoLongitudinalCg = "CENTRAL";
+    tendenciaLongitudinalCg =
+      "Concentração de peso predominantemente na região central";
+  } else {
+    regiaoLongitudinalCg = "TRASEIRA";
+    tendenciaLongitudinalCg =
+      "Concentração de peso com tendência para a região traseira";
+  }
+
+  let orientacaoLongitudinalCg = null;
+
+  if (regiaoLongitudinalCg === "DIANTEIRA") {
+    orientacaoLongitudinalCg = {
+      regiao: "dianteira",
+      titulo: "CONCENTRAÇÃO LONGITUDINAL DIANTEIRA",
+      mensagem:
+        "A distribuição estimada apresenta maior concentração de peso na região dianteira do espaço útil. Recomenda-se verificar o posicionamento da carga antes da operação.",
+    };
+  } else if (regiaoLongitudinalCg === "TRASEIRA") {
+    orientacaoLongitudinalCg = {
+      regiao: "traseira",
+      titulo: "CONCENTRAÇÃO LONGITUDINAL TRASEIRA",
+      mensagem:
+        "A distribuição estimada apresenta maior concentração de peso na região traseira do espaço útil. Recomenda-se verificar o posicionamento da carga antes da operação.",
+    };
+  }
+
+  let ressalvaCg = null;
+
+  if (nivelCg === "atencao") {
+    ressalvaCg = {
+      nivel: "atencao",
+
+      titulo:
+        "ATENÇÃO À DISTRIBUIÇÃO DA CARGA",
+
+      mensagem:
+        "O centro de gravidade estimado ficou afastado da região ideal. Revise o posicionamento da carga antes da operação.",
+    };
+  } else if (nivelCg === "critico") {
+    ressalvaCg = {
+      nivel: "critico",
+
+      titulo:
+        "DISTRIBUIÇÃO CRÍTICA DA CARGA",
+
+      mensagem:
+        "O centro de gravidade estimado ficou significativamente afastado da região ideal. Recomenda-se revisar a disposição da carga antes de prosseguir.",
+    };
+  }
+
+  return {
+    diferencaCgEixos,
+    nivelCg,
+    classificacaoCg,
+    orientacaoLongitudinalCg,
+    ressalvaCg,
+  };
+}
 
 // =====================================================
 // PILHAS FÍSICAS COMPOSTAS
 //
-// Itens cadastrados em linhas diferentes podem compartilhar
-// a mesma pilha quando possuem a mesma base física.
-//
-// A identidade individual de cada volume é preservada.
-// Base e palete continuam sem empilhamento automático.
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// monta a lista de "caixas individuais" (incluindo
+// pilhas empilhadas) a partir dos itens cadastrados.
+// Não decide POSIÇÃO nenhuma, só monta a lista.
 // =====================================================
 
-const gruposEmpilhamento =
-  agruparItensParaEmpilhamento(itens);
+function montarCaixasIndividuais(itens, veiculo) {
+  let caixasIndividuais = [];
 
-gruposEmpilhamento.forEach((grupo) => {
+  const gruposEmpilhamento =
+    agruparItensParaEmpilhamento(itens);
 
-  // ===================================================
-  // BASE / PALETE
-  // Permanecem como posições individuais.
-  // ===================================================
+  gruposEmpilhamento.forEach((grupo) => {
 
-  if (grupo.ehPalletOuBase) {
+    if (grupo.ehPalletOuBase) {
 
-    grupo.unidades.forEach((unidade) => {
+      grupo.unidades.forEach((unidade) => {
 
-      const nomeMinusculo =
-        String(unidade.nome || "").toLowerCase();
+        const nomeMinusculo =
+          String(unidade.nome || "").toLowerCase();
 
-      let textoInterno = "";
+        let textoInterno = "";
 
-      if (
-        nomeMinusculo.includes("pallet") ||
-        nomeMinusculo.includes("palete")
-      ) {
-        textoInterno = "PALETE";
+        if (
+          nomeMinusculo.includes("pallet") ||
+          nomeMinusculo.includes("palete")
+        ) {
+          textoInterno = "PALETE";
+        }
+
+        if (nomeMinusculo.includes("base")) {
+          textoInterno = "BASE";
+        }
+
+        caixasIndividuais.push({
+          id: unidade.id,
+          nome: unidade.nome,
+
+          comp: grupo.comp,
+          larg: grupo.larg,
+
+          cor: unidade.cor,
+
+          ehPallet: true,
+          textoTxt: textoInterno,
+
+          empilhados: 1,
+
+          pesoUnitario: unidade.peso,
+          pesoBloco: unidade.peso,
+
+          alturaTotal: unidade.alt,
+
+          unidades: [
+            {
+              ...unidade,
+            },
+          ],
+
+          dimTexto:
+            `${grupo.comp.toFixed(2)}x${grupo.larg.toFixed(2)}`,
+
+          area:
+            grupo.comp * grupo.larg,
+        });
+      });
+
+      return;
+    }
+
+    const unidades =
+      [...grupo.unidades].sort(
+        (a, b) =>
+          b.alt - a.alt ||
+          b.peso - a.peso
+      );
+
+    const pilhas = [];
+
+    unidades.forEach((unidade) => {
+
+      let pilhaEncontrada = null;
+
+      for (const pilha of pilhas) {
+
+        const possuiItemAlto =
+          unidade.alt > 0.8 ||
+          pilha.unidades.some(
+            (u) => u.alt > 0.8
+          );
+
+        const limiteQuantidade =
+          possuiItemAlto ? 2 : 3;
+
+        const novaAltura =
+          pilha.alturaTotal +
+          unidade.alt;
+
+        const cabePorQuantidade =
+          pilha.unidades.length 
+          limiteQuantidade;
+
+        const cabePorAltura =
+          novaAltura <=
+          veiculo.altFisica + 0.01;
+
+        if (
+          cabePorQuantidade &&
+          cabePorAltura
+        ) {
+          pilhaEncontrada = pilha;
+          break;
+        }
       }
 
-      if (nomeMinusculo.includes("base")) {
-        textoInterno = "BASE";
+      if (pilhaEncontrada) {
+
+        pilhaEncontrada.unidades.push(
+          unidade
+        );
+
+        pilhaEncontrada.alturaTotal +=
+          unidade.alt;
+
+      } else {
+
+        pilhas.push({
+          alturaTotal: unidade.alt,
+          unidades: [unidade],
+        });
       }
+    });
+
+    pilhas.forEach((pilha) => {
+
+      pilha.unidades.sort(
+        (a, b) => b.peso - a.peso
+      );
+
+      const pesoBloco =
+        pilha.unidades.reduce(
+          (total, unidade) =>
+            total + unidade.peso,
+          0
+        );
+
+      const unidadeReferencia =
+        pilha.unidades[0];
+
+      const nomesPilha =
+        pilha.unidades
+          .map((unidade) => unidade.nome)
+          .join(" + ");
 
       caixasIndividuais.push({
-        id: unidade.id,
-        nome: unidade.nome,
+        id: unidadeReferencia.id,
+
+        nome:
+          pilha.unidades.length > 1
+            ? nomesPilha
+            : unidadeReferencia.nome,
 
         comp: grupo.comp,
         larg: grupo.larg,
 
-        cor: unidade.cor,
+        cor: unidadeReferencia.cor,
 
-        ehPallet: true,
-        textoTxt: textoInterno,
+        ehPallet: false,
+        textoTxt: "",
 
-        empilhados: 1,
+        empilhados:
+          pilha.unidades.length,
 
-        pesoUnitario: unidade.peso,
-        pesoBloco: unidade.peso,
+        pesoUnitario:
+          unidadeReferencia.peso,
 
-        alturaTotal: unidade.alt,
+        pesoBloco,
 
-        unidades: [
-          {
-            ...unidade,
-          },
-        ],
+        alturaTotal:
+          pilha.alturaTotal,
+
+        unidades:
+          pilha.unidades.map(
+            (unidade) => ({
+              ...unidade,
+            })
+          ),
 
         dimTexto:
           `${grupo.comp.toFixed(2)}x${grupo.larg.toFixed(2)}`,
@@ -2639,310 +3016,32 @@ gruposEmpilhamento.forEach((grupo) => {
           grupo.comp * grupo.larg,
       });
     });
-
-    return;
-  }
-
-  // ===================================================
-  // CAIXAS / VOLUMES EMPILHÁVEIS
-  // ===================================================
-
-  const unidades =
-    [...grupo.unidades].sort(
-      (a, b) =>
-        b.alt - a.alt ||
-        b.peso - a.peso
-    );
-
-  const pilhas = [];
-
-  unidades.forEach((unidade) => {
-
-    let pilhaEncontrada = null;
-
-    for (const pilha of pilhas) {
-
-      const possuiItemAlto =
-        unidade.alt > 0.8 ||
-        pilha.unidades.some(
-          (u) => u.alt > 0.8
-        );
-
-      const limiteQuantidade =
-        possuiItemAlto ? 2 : 3;
-
-      const novaAltura =
-        pilha.alturaTotal +
-        unidade.alt;
-
-      const cabePorQuantidade =
-        pilha.unidades.length <
-        limiteQuantidade;
-
-      const cabePorAltura =
-        novaAltura <=
-        veiculo.altFisica + 0.01;
-
-      if (
-        cabePorQuantidade &&
-        cabePorAltura
-      ) {
-        pilhaEncontrada = pilha;
-        break;
-      }
-    }
-
-    if (pilhaEncontrada) {
-
-      pilhaEncontrada.unidades.push(
-        unidade
-      );
-
-      pilhaEncontrada.alturaTotal +=
-        unidade.alt;
-
-    } else {
-
-      pilhas.push({
-        alturaTotal: unidade.alt,
-        unidades: [unidade],
-      });
-    }
   });
 
-  // ===================================================
-  // CONVERTE CADA PILHA EM UM BLOCO DE PISO
-  // ===================================================
-
-  pilhas.forEach((pilha) => {
-
-    // Depois que a composição física foi definida,
-    // organizamos a pilha pelo peso:
-    // mais pesado primeiro = parte inferior.
-    pilha.unidades.sort(
-      (a, b) => b.peso - a.peso
-    );
-
-    const pesoBloco =
-      pilha.unidades.reduce(
-        (total, unidade) =>
-          total + unidade.peso,
-        0
-      );
-
-    const unidadeReferencia =
-      pilha.unidades[0];
-
-    const nomesPilha =
-      pilha.unidades
-        .map((unidade) => unidade.nome)
-        .join(" + ");
-
-    caixasIndividuais.push({
-      id: unidadeReferencia.id,
-
-      nome:
-        pilha.unidades.length > 1
-          ? nomesPilha
-          : unidadeReferencia.nome,
-
-      comp: grupo.comp,
-      larg: grupo.larg,
-
-      cor: unidadeReferencia.cor,
-
-      ehPallet: false,
-      textoTxt: "",
-
-      empilhados:
-        pilha.unidades.length,
-
-      pesoUnitario:
-        unidadeReferencia.peso,
-
-      pesoBloco,
-
-      alturaTotal:
-        pilha.alturaTotal,
-
-      unidades:
-        pilha.unidades.map(
-          (unidade) => ({
-            ...unidade,
-          })
-        ),
-
-      dimTexto:
-        `${grupo.comp.toFixed(2)}x${grupo.larg.toFixed(2)}`,
-
-      area:
-        grupo.comp * grupo.larg,
-    });
-  });
-});
   caixasIndividuais.sort((a, b) => {
-  const pesoA = (a.peso || 0) * (a.quantidadeEmpilhada || 1);
-  const pesoB = (b.peso || 0) * (b.quantidadeEmpilhada || 1);
+    const pesoA = (a.peso || 0) * (a.quantidadeEmpilhada || 1);
+    const pesoB = (b.peso || 0) * (b.quantidadeEmpilhada || 1);
 
-  return (
-    pesoB - pesoA ||
-    b.comp - a.comp ||
-    b.area - a.area
-  );
-});
-
-// =====================================================
-// C3 - CLASSIFICAÇÃO DE PESO E REGIÃO ESTIMADA DOS EIXOS
-// =====================================================
-
-// Um bloco será considerado pesado quando tiver:
-// - pelo menos 1.000 kg;
-// - e representar aproximadamente 10% da capacidade do veículo.
-const limiteCargaPesada = Math.max(
-  1000,
-  veiculo.pesoMax * 0.1
-);
-
-// Região operacional estimada dos eixos:
-// entre 55% e 70% do comprimento útil,
-// medidos a partir da cabine.
-const inicioZonaEixos = veiculo.compFisico * 0.55;
-const fimZonaEixos = veiculo.compFisico * 0.7;
-const centroZonaEixos =
-  (inicioZonaEixos + fimZonaEixos) / 2;
-
-caixasIndividuais.forEach((caixa) => {
-  caixa.ehCargaPesada =
-    caixa.pesoBloco >= limiteCargaPesada;
-});
-
-let espaçosLivres = [
-  {
-    x: 0,
-    y: 0,
-    comp: veiculo.compFisico,
-    larg: veiculo.largFisica,
-  },
-];
-
-let caixasPosicionadas = [];
-
-/*
-  As cargas pesadas são processadas primeiro.
-
-  Depois, as cargas leves ocupam os espaços restantes
-  em linhas, priorizando o menor Y e avançando no eixo X.
-*/
-caixasIndividuais.sort((a, b) => {
-  if (a.ehCargaPesada !== b.ehCargaPesada) {
-    return a.ehCargaPesada ? -1 : 1;
-  }
-
-  return (
-    b.pesoBloco - a.pesoBloco ||
-    b.area - a.area ||
-    b.comp - a.comp
-  );
-});
-
-/*
-  Remove a área ocupada de todos os espaços livres.
-
-  Isso evita espaços sobrepostos e impede que duas cargas
-  sejam posicionadas fisicamente na mesma região.
-*/
-function removerAreaOcupada(areaOcupada) {
-  const novosEspacos = [];
-
-  espaçosLivres.forEach((espaco) => {
-    const inicioIntersecaoX = Math.max(
-      espaco.x,
-      areaOcupada.x,
+    return (
+      pesoB - pesoA ||
+      b.comp - a.comp ||
+      b.area - a.area
     );
-
-    const fimIntersecaoX = Math.min(
-      espaco.x + espaco.comp,
-      areaOcupada.x + areaOcupada.comp,
-    );
-
-    const inicioIntersecaoY = Math.max(
-      espaco.y,
-      areaOcupada.y,
-    );
-
-    const fimIntersecaoY = Math.min(
-      espaco.y + espaco.larg,
-      areaOcupada.y + areaOcupada.larg,
-    );
-
-    const existeIntersecao =
-      fimIntersecaoX > inicioIntersecaoX + 0.01 &&
-      fimIntersecaoY > inicioIntersecaoY + 0.01;
-
-    if (!existeIntersecao) {
-      novosEspacos.push(espaco);
-      return;
-    }
-
-    const espacoEsquerda = {
-      x: espaco.x,
-      y: espaco.y,
-      comp: inicioIntersecaoX - espaco.x,
-      larg: espaco.larg,
-    };
-
-    const espacoDireita = {
-      x: fimIntersecaoX,
-      y: espaco.y,
-      comp:
-        espaco.x +
-        espaco.comp -
-        fimIntersecaoX,
-      larg: espaco.larg,
-    };
-
-    const espacoAbaixo = {
-      x: inicioIntersecaoX,
-      y: espaco.y,
-      comp:
-        fimIntersecaoX -
-        inicioIntersecaoX,
-      larg:
-        inicioIntersecaoY -
-        espaco.y,
-    };
-
-    const espacoAcima = {
-      x: inicioIntersecaoX,
-      y: fimIntersecaoY,
-      comp:
-        fimIntersecaoX -
-        inicioIntersecaoX,
-      larg:
-        espaco.y +
-        espaco.larg -
-        fimIntersecaoY,
-    };
-
-    [
-      espacoEsquerda,
-      espacoDireita,
-      espacoAbaixo,
-      espacoAcima,
-    ].forEach((novoEspaco) => {
-      if (
-        novoEspaco.comp > 0.01 &&
-        novoEspaco.larg > 0.01
-      ) {
-        novosEspacos.push(novoEspaco);
-      }
-    });
   });
 
-  espaçosLivres = novosEspacos;
+  return caixasIndividuais;
 }
 
-function tentarArrumacaoCompacta(caixasOriginais) {
+// =====================================================
+// TENTATIVA DE ARRUMAÇÃO COMPACTA (FALLBACK FÍSICO)
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// tentativa alternativa de encaixe quando a distribuição
+// por peso não encontra posição. Usa espaço próprio,
+// não mexe nos espaços livres do encaixe principal.
+// =====================================================
+
+function tentarArrumacaoCompacta(caixasOriginais, veiculo, centroZonaEixos) {
   const caixasTeste = caixasOriginais
     .map((caixa) => ({ ...caixa }))
     .sort(
@@ -3042,24 +3141,6 @@ function tentarArrumacaoCompacta(caixasOriginais) {
     }
   }
 
-  /*
-    C3 - BALANCEAMENTO DO FALLBACK
-
-    O fallback já encontrou uma disposição fisicamente válida.
-
-    Agora, entre blocos que possuem exatamente a mesma
-    ocupação no piso, redistribuímos apenas qual carga ocupa
-    cada posição.
-
-    Isso mantém:
-    - a geometria;
-    - os espaços encontrados;
-    - ausência de colisões;
-
-    mas coloca os blocos mais pesados nas posições mais
-    próximas da região estimada dos eixos.
-  */
-
   const menorXFallback = Math.min(
     ...posicionadasFallback.map(
       (caixa) => caixa.X_Fisico,
@@ -3076,13 +3157,6 @@ function tentarArrumacaoCompacta(caixasOriginais) {
   const comprimentoOcupadoFallback =
     maiorXFallback - menorXFallback;
 
-  /*
-    O renderizador centraliza posteriormente o conjunto.
-
-    Calculamos aqui esse deslocamento antecipadamente apenas
-    para avaliar corretamente qual posição ficará mais próxima
-    da região dos eixos depois da centralização.
-  */
   const deslocamentoPrevistoX =
     (veiculo.compFisico - comprimentoOcupadoFallback) / 2 -
     menorXFallback;
@@ -3105,10 +3179,6 @@ function tentarArrumacaoCompacta(caixasOriginais) {
       return;
     }
 
-    /*
-      Guardamos somente as posições físicas já validadas
-      pelo fallback.
-    */
     const posicoes = grupo
       .map((caixa) => ({
         x: caixa.X_Fisico,
@@ -3133,20 +3203,11 @@ function tentarArrumacaoCompacta(caixasOriginais) {
         );
       });
 
-    /*
-      Mais pesado primeiro.
-    */
     const caixasOrdenadas = [...grupo].sort(
       (a, b) =>
         b.pesoBloco - a.pesoBloco,
     );
 
-    /*
-      A carga mais pesada recebe a posição válida mais
-      próxima da região dos eixos.
-
-      Nenhuma nova geometria é criada aqui.
-    */
     caixasOrdenadas.forEach((caixa, index) => {
       const posicao = posicoes[index];
 
@@ -3160,423 +3221,568 @@ function tentarArrumacaoCompacta(caixasOriginais) {
   return posicionadasFallback;
 }
 
-const caixasProcessadasEmGrupo = new Set();
-
-caixasIndividuais.forEach((caixa, indiceCaixa) => {
-
-  // Se esta caixa já foi posicionada junto com outra
-  // unidade igual, não processa novamente.
-  if (caixasProcessadasEmGrupo.has(caixa)) {
-    return;
-  }
-
-  // =====================================================
-  // C4 - AGRUPAMENTO TRANSVERSAL PRÉVIO
-  //
-  // Para cargas leves iguais, tenta posicionar duas
-  // unidades juntas transversalmente:
-  //
-  // [ B ]
-  // [ B ]
-  //
-  // A orientação original informada pelo usuário
-  // é preservada. Nenhuma rotação automática é feita.
-  // =====================================================
-
-  const caixaParceira =
-    caixasIndividuais.find(
-      (outraCaixa, indiceOutra) =>
-        indiceOutra !== indiceCaixa &&
-        !caixasProcessadasEmGrupo.has(outraCaixa) &&
-        outraCaixa.id === caixa.id &&
-        !caixa.ehCargaPesada &&
-        !outraCaixa.ehCargaPesada &&
-        Math.abs(outraCaixa.comp - caixa.comp) <= 0.01 &&
-        Math.abs(outraCaixa.larg - caixa.larg) <= 0.01
-    );
-
-  if (caixaParceira) {
-
-    const compGrupo = caixa.comp;
-
-    const largGrupo =
-      caixa.larg +
-      caixaParceira.larg;
-
-    let melhorPosicaoGrupo = null;
-
-    espaçosLivres.forEach((espaco) => {
-
-      const grupoCabe =
-        compGrupo <= espaco.comp + 0.01 &&
-        largGrupo <= espaco.larg + 0.01;
-
-      if (!grupoCabe) {
-        return;
-      }
-
-      const posicaoXGrupo = espaco.x;
-      const posicaoYGrupo = espaco.y;
-
-      // ---------------------------------------------
-      // Calcula o CG lateral existente
-      // ---------------------------------------------
-
-      let pesoJaPosicionado = 0;
-      let momentoLateralAtual = 0;
-
-      caixasPosicionadas.forEach((caixaPosicionada) => {
-
-        const centroY =
-          caixaPosicionada.Y_Fisico +
-          caixaPosicionada.largRender / 2;
-
-        pesoJaPosicionado +=
-          caixaPosicionada.pesoBloco;
-
-        momentoLateralAtual +=
-          centroY *
-          caixaPosicionada.pesoBloco;
-      });
-
-      // Centro lateral da primeira unidade
-      const centroYCaixa1 =
-        posicaoYGrupo +
-        caixa.larg / 2;
-
-      // Centro lateral da segunda unidade
-      const centroYCaixa2 =
-        posicaoYGrupo +
-        caixa.larg +
-        caixaParceira.larg / 2;
-
-      const pesoProjetado =
-        pesoJaPosicionado +
-        caixa.pesoBloco +
-        caixaParceira.pesoBloco;
-
-      const momentoProjetado =
-        momentoLateralAtual +
-        centroYCaixa1 * caixa.pesoBloco +
-        centroYCaixa2 * caixaParceira.pesoBloco;
-
-      const cgLateralProjetado =
-        pesoProjetado > 0
-          ? momentoProjetado / pesoProjetado
-          : veiculo.largFisica / 2;
-
-      const desvioProjetado =
-        Math.abs(
-          cgLateralProjetado -
-          veiculo.largFisica / 2
-        );
-
-      const desperdicioGrupo =
-        espaco.comp * espaco.larg -
-        compGrupo * largGrupo;
-
-      const pontuacaoGrupo =
-        desvioProjetado * 1000000 +
-        espaco.y * 1000 +
-        espaco.x * 100 +
-        desperdicioGrupo;
-
-      if (
-        melhorPosicaoGrupo === null ||
-        pontuacaoGrupo < melhorPosicaoGrupo.pontuacao
-      ) {
-        melhorPosicaoGrupo = {
-          x: posicaoXGrupo,
-          y: posicaoYGrupo,
-          pontuacao: pontuacaoGrupo,
-        };
-      }
-    });
-
-    // =====================================================
-    // Se existe espaço para o par, posiciona as duas
-    // unidades ao mesmo tempo.
-    // =====================================================
-
-    if (melhorPosicaoGrupo) {
-
-      caixa.X_Fisico =
-        melhorPosicaoGrupo.x;
-
-      caixa.Y_Fisico =
-        melhorPosicaoGrupo.y;
-
-      caixa.compRender =
-        caixa.comp;
-
-      caixa.largRender =
-        caixa.larg;
-
-
-      caixaParceira.X_Fisico =
-        melhorPosicaoGrupo.x;
-
-      caixaParceira.Y_Fisico =
-        melhorPosicaoGrupo.y +
-        caixa.larg;
-
-      caixaParceira.compRender =
-        caixaParceira.comp;
-
-      caixaParceira.largRender =
-        caixaParceira.larg;
-
-
-      caixasPosicionadas.push(
-        caixa,
-        caixaParceira
-      );
-
-      caixasProcessadasEmGrupo.add(caixa);
-      caixasProcessadasEmGrupo.add(caixaParceira);
-
-      removerAreaOcupada({
-        x: melhorPosicaoGrupo.x,
-        y: melhorPosicaoGrupo.y,
-        comp: compGrupo,
-        larg: largGrupo,
-      });
-
-      return;
-    }
-  }
-
-  // Se não existir espaço físico para o agrupamento,
-  // segue normalmente com o posicionamento individual.
-
-  let melhorPosicao = null;
-
-  espaçosLivres.forEach((espaco) => {
-  const orientacoes = [
-  {
-    comp: caixa.comp,
-    larg: caixa.larg,
-  },
-];
-
-    orientacoes.forEach((orientacao) => {
-      const cabeNoEspaco =
-        orientacao.comp <= espaco.comp + 0.01 &&
-        orientacao.larg <= espaco.larg + 0.01;
-
-      if (!cabeNoEspaco) {
-        return;
-      }
-
-      let posicaoX = espaco.x;
-      let posicaoY = espaco.y;
-      let pontuacao = 0;
-
-      if (caixa.ehCargaPesada) {
-        const posicaoIdealX =
-          centroZonaEixos -
-          orientacao.comp / 2;
-
-        const posicaoIdealY =
-          veiculo.largFisica / 2 -
-          orientacao.larg / 2;
-
-        const maximoX =
-          espaco.x +
-          espaco.comp -
-          orientacao.comp;
-
-        const maximoY =
-          espaco.y +
-          espaco.larg -
-          orientacao.larg;
-
-        posicaoX = Math.max(
-          espaco.x,
-          Math.min(posicaoIdealX, maximoX),
-        );
-
-        posicaoY = Math.max(
-          espaco.y,
-          Math.min(posicaoIdealY, maximoY),
-        );
-
-        const centroCargaX =
-          posicaoX +
-          orientacao.comp / 2;
-
-        const centroCargaY =
-          posicaoY +
-          orientacao.larg / 2;
-
-        const distanciaEixos = Math.abs(
-          centroCargaX -
-          centroZonaEixos,
-        );
-
-        const distanciaLateral = Math.abs(
-          centroCargaY -
-          veiculo.largFisica / 2,
-        );
-
-        const desperdicio =
-          espaco.comp * espaco.larg -
-          orientacao.comp * orientacao.larg;
-
-        pontuacao =
-          distanciaEixos * 1000 +
-          distanciaLateral * 100 +
-          desperdicio;
-      } else {
-        /*
-          Carga leve:
-
-          1. prioriza a linha mais baixa;
-          2. avança da esquerda para a direita;
-          3. prefere orientação normal;
-          4. usa o menor espaço suficiente.
-        */
-       const desperdicio =
-  espaco.comp * espaco.larg -
-  orientacao.comp * orientacao.larg;
-
 // =====================================================
-// C4 - BALANCEAMENTO LATERAL PREDITIVO
+// C3 - CLASSIFICAÇÃO DE PESO E REGIÃO ESTIMADA DOS EIXOS
 //
-// Em vez de centralizar esta caixa isoladamente,
-// estima como ficará o CG lateral do conjunto caso
-// esta posição seja escolhida.
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// marca cada caixa como pesada/leve, ordena a lista
+// (pesadas primeiro) e devolve o centro da zona dos
+// eixos, usado depois no ajuste de centro de gravidade.
 // =====================================================
 
-let pesoJaPosicionado = 0;
-let momentoLateralAtual = 0;
-
-caixasPosicionadas.forEach((caixaPosicionada) => {
-  const centroYCaixaPosicionada =
-    caixaPosicionada.Y_Fisico +
-    caixaPosicionada.largRender / 2;
-
-  pesoJaPosicionado +=
-    caixaPosicionada.pesoBloco;
-
-  momentoLateralAtual +=
-    centroYCaixaPosicionada *
-    caixaPosicionada.pesoBloco;
-});
-
-const centroCargaY =
-  posicaoY +
-  orientacao.larg / 2;
-
-const pesoProjetado =
-  pesoJaPosicionado +
-  caixa.pesoBloco;
-
-const momentoLateralProjetado =
-  momentoLateralAtual +
-  centroCargaY *
-  caixa.pesoBloco;
-
-const cgLateralProjetado =
-  pesoProjetado > 0
-    ? momentoLateralProjetado / pesoProjetado
-    : veiculo.largFisica / 2;
-
-const desvioCgLateralProjetado =
-  Math.abs(
-    cgLateralProjetado -
-    veiculo.largFisica / 2
+function classificarCaixasPorPeso(caixasIndividuais, veiculo) {
+  const limiteCargaPesada = Math.max(
+    1000,
+    veiculo.pesoMax * 0.1
   );
 
-      }
+  const inicioZonaEixos = veiculo.compFisico * 0.55;
+  const fimZonaEixos = veiculo.compFisico * 0.7;
+  const centroZonaEixos =
+    (inicioZonaEixos + fimZonaEixos) / 2;
 
+  caixasIndividuais.forEach((caixa) => {
+    caixa.ehCargaPesada =
+      caixa.pesoBloco >= limiteCargaPesada;
+  });
+
+  caixasIndividuais.sort((a, b) => {
+    if (a.ehCargaPesada !== b.ehCargaPesada) {
+      return a.ehCargaPesada ? -1 : 1;
+    }
+
+    return (
+      b.pesoBloco - a.pesoBloco ||
+      b.area - a.area ||
+      b.comp - a.comp
+    );
+  });
+
+  return { inicioZonaEixos, fimZonaEixos, centroZonaEixos };
+}
+
+// =====================================================
+// POSICIONAMENTO DAS CAIXAS NO ESPAÇO DISPONÍVEL
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// é o "coração" do encaixe físico: decide onde cada
+// caixa vai, testando espaços livres e escolhendo a
+// melhor posição por pontuação.
+//
+// Inclui também o fix do balanceamento lateral
+// preditivo (cargas leves), que tinha sido combinado
+// antes mas nunca chegou a ser aplicado de fato —
+// ver a linha "pontuacao = desvioCgLateralProjetado..."
+// marcada abaixo.
+// =====================================================
+
+
+/*
+  Remove a área ocupada de todos os espaços livres.
+
+  Isso evita espaços sobrepostos e impede que duas cargas
+  sejam posicionadas fisicamente na mesma região.
+*/
+function removerAreaOcupada(espaçosLivres, areaOcupada) {
+  const novosEspacos = [];
+
+  espaçosLivres.forEach((espaco) => {
+    const inicioIntersecaoX = Math.max(
+      espaco.x,
+      areaOcupada.x,
+    );
+
+    const fimIntersecaoX = Math.min(
+      espaco.x + espaco.comp,
+      areaOcupada.x + areaOcupada.comp,
+    );
+
+    const inicioIntersecaoY = Math.max(
+      espaco.y,
+      areaOcupada.y,
+    );
+
+    const fimIntersecaoY = Math.min(
+      espaco.y + espaco.larg,
+      areaOcupada.y + areaOcupada.larg,
+    );
+
+    const existeIntersecao =
+      fimIntersecaoX > inicioIntersecaoX + 0.01 &&
+      fimIntersecaoY > inicioIntersecaoY + 0.01;
+
+    if (!existeIntersecao) {
+      novosEspacos.push(espaco);
+      return;
+    }
+
+    const espacoEsquerda = {
+      x: espaco.x,
+      y: espaco.y,
+      comp: inicioIntersecaoX - espaco.x,
+      larg: espaco.larg,
+    };
+
+    const espacoDireita = {
+      x: fimIntersecaoX,
+      y: espaco.y,
+      comp:
+        espaco.x +
+        espaco.comp -
+        fimIntersecaoX,
+      larg: espaco.larg,
+    };
+
+    const espacoAbaixo = {
+      x: inicioIntersecaoX,
+      y: espaco.y,
+      comp:
+        fimIntersecaoX -
+        inicioIntersecaoX,
+      larg:
+        inicioIntersecaoY -
+        espaco.y,
+    };
+
+    const espacoAcima = {
+      x: inicioIntersecaoX,
+      y: fimIntersecaoY,
+      comp:
+        fimIntersecaoX -
+        inicioIntersecaoX,
+      larg:
+        espaco.y +
+        espaco.larg -
+        fimIntersecaoY,
+    };
+
+    [
+      espacoEsquerda,
+      espacoDireita,
+      espacoAbaixo,
+      espacoAcima,
+    ].forEach((novoEspaco) => {
       if (
-        melhorPosicao === null ||
-        pontuacao < melhorPosicao.pontuacao
+        novoEspaco.comp > 0.01 &&
+        novoEspaco.larg > 0.01
       ) {
-        melhorPosicao = {
-          posicaoX,
-          posicaoY,
-          comp: orientacao.comp,
-          larg: orientacao.larg,
-          pontuacao,
-        };
+        novosEspacos.push(novoEspaco);
       }
     });
   });
 
-  if (melhorPosicao) {
-    caixa.X_Fisico =
-      melhorPosicao.posicaoX;
-
-    caixa.Y_Fisico =
-      melhorPosicao.posicaoY;
-
-    caixa.compRender =
-      melhorPosicao.comp;
-
-    caixa.largRender =
-      melhorPosicao.larg;
-
-    caixasPosicionadas.push(caixa);
-
-    removerAreaOcupada({
-      x: caixa.X_Fisico,
-      y: caixa.Y_Fisico,
-      comp: caixa.compRender,
-      larg: caixa.largRender,
-    });
-
-    return;
-  }
-
-  if (posicionarCaixaComAET(caixa, veiculo)) {
-    caixasPosicionadas.push(caixa);
-    return;
-  }
-
-  globalEstorouMetragem = true;
-  globalItensExcedentes.push(caixa);
-
-  caixa.X_Fisico =
-    veiculo.compFisico +
-    0.2 +
-    (globalItensExcedentes.length - 1) *
-      (caixa.comp + 0.15);
-
-  caixa.Y_Fisico = 0;
-  caixa.compRender = caixa.comp;
-  caixa.largRender = caixa.larg;
-
-  caixasPosicionadas.push(caixa);
-});
-
-/*
-  C3 - FALLBACK DE ARRUMAÇÃO FÍSICA
-
-  Se a distribuição otimizada por peso não conseguiu
-  acomodar todos os blocos, tenta novamente usando uma
-  arrumação compacta puramente geométrica.
-
-  Assim, uma tentativa ruim de balanceamento não faz uma
-  carga fisicamente compatível ser considerada excedente.
-*/
-
-let usouFallbackFisico = false;
-
-if (globalEstorouMetragem) {
-  const arrumacaoFallback =
-    tentarArrumacaoCompacta(caixasIndividuais);
-
-  if (arrumacaoFallback) {
-    caixasPosicionadas = arrumacaoFallback;
-globalEstorouMetragem = false;
-globalItensExcedentes = [];
-
-usouFallbackFisico = true;
-  }
+  return novosEspacos;
 }
 
+function posicionarCaixasNoEspaco(caixasIndividuais, veiculo, centroZonaEixos, espaçosLivres, caixasPosicionadas) {
+  const caixasProcessadasEmGrupo = new Set();
+
+  caixasIndividuais.forEach((caixa, indiceCaixa) => {
+
+    // Se esta caixa já foi posicionada junto com outra
+    // unidade igual, não processa novamente.
+    if (caixasProcessadasEmGrupo.has(caixa)) {
+      return;
+    }
+
+    // =====================================================
+    // C4 - AGRUPAMENTO TRANSVERSAL PRÉVIO
+    //
+    // Para cargas leves iguais, tenta posicionar duas
+    // unidades juntas transversalmente:
+    //
+    // [ B ]
+    // [ B ]
+    //
+    // A orientação original informada pelo usuário
+    // é preservada. Nenhuma rotação automática é feita.
+    // =====================================================
+
+    const caixaParceira =
+      caixasIndividuais.find(
+        (outraCaixa, indiceOutra) =>
+          indiceOutra !== indiceCaixa &&
+          !caixasProcessadasEmGrupo.has(outraCaixa) &&
+          outraCaixa.id === caixa.id &&
+          !caixa.ehCargaPesada &&
+          !outraCaixa.ehCargaPesada &&
+          Math.abs(outraCaixa.comp - caixa.comp) <= 0.01 &&
+          Math.abs(outraCaixa.larg - caixa.larg) <= 0.01
+      );
+
+    if (caixaParceira) {
+
+      const compGrupo = caixa.comp;
+
+      const largGrupo =
+        caixa.larg +
+        caixaParceira.larg;
+
+      let melhorPosicaoGrupo = null;
+
+      espaçosLivres.forEach((espaco) => {
+
+        const grupoCabe =
+          compGrupo <= espaco.comp + 0.01 &&
+          largGrupo <= espaco.larg + 0.01;
+
+        if (!grupoCabe) {
+          return;
+        }
+
+        const posicaoXGrupo = espaco.x;
+        const posicaoYGrupo = espaco.y;
+
+        // ---------------------------------------------
+        // Calcula o CG lateral existente
+        // ---------------------------------------------
+
+        let pesoJaPosicionado = 0;
+        let momentoLateralAtual = 0;
+
+        caixasPosicionadas.forEach((caixaPosicionada) => {
+
+          const centroY =
+            caixaPosicionada.Y_Fisico +
+            caixaPosicionada.largRender / 2;
+
+          pesoJaPosicionado +=
+            caixaPosicionada.pesoBloco;
+
+          momentoLateralAtual +=
+            centroY *
+            caixaPosicionada.pesoBloco;
+        });
+
+        // Centro lateral da primeira unidade
+        const centroYCaixa1 =
+          posicaoYGrupo +
+          caixa.larg / 2;
+
+        // Centro lateral da segunda unidade
+        const centroYCaixa2 =
+          posicaoYGrupo +
+          caixa.larg +
+          caixaParceira.larg / 2;
+
+        const pesoProjetado =
+          pesoJaPosicionado +
+          caixa.pesoBloco +
+          caixaParceira.pesoBloco;
+
+        const momentoProjetado =
+          momentoLateralAtual +
+          centroYCaixa1 * caixa.pesoBloco +
+          centroYCaixa2 * caixaParceira.pesoBloco;
+
+        const cgLateralProjetado =
+          pesoProjetado > 0
+            ? momentoProjetado / pesoProjetado
+            : veiculo.largFisica / 2;
+
+        const desvioProjetado =
+          Math.abs(
+            cgLateralProjetado -
+            veiculo.largFisica / 2
+          );
+
+        const desperdicioGrupo =
+          espaco.comp * espaco.larg -
+          compGrupo * largGrupo;
+
+        const pontuacaoGrupo =
+          desvioProjetado * 1000000 +
+          espaco.y * 1000 +
+          espaco.x * 100 +
+          desperdicioGrupo;
+
+        if (
+          melhorPosicaoGrupo === null ||
+          pontuacaoGrupo < melhorPosicaoGrupo.pontuacao
+        ) {
+          melhorPosicaoGrupo = {
+            x: posicaoXGrupo,
+            y: posicaoYGrupo,
+            pontuacao: pontuacaoGrupo,
+          };
+        }
+      });
+
+      // =====================================================
+      // Se existe espaço para o par, posiciona as duas
+      // unidades ao mesmo tempo.
+      // =====================================================
+
+      if (melhorPosicaoGrupo) {
+
+        caixa.X_Fisico =
+          melhorPosicaoGrupo.x;
+
+        caixa.Y_Fisico =
+          melhorPosicaoGrupo.y;
+
+        caixa.compRender =
+          caixa.comp;
+
+        caixa.largRender =
+          caixa.larg;
+
+
+        caixaParceira.X_Fisico =
+          melhorPosicaoGrupo.x;
+
+        caixaParceira.Y_Fisico =
+          melhorPosicaoGrupo.y +
+          caixa.larg;
+
+        caixaParceira.compRender =
+          caixaParceira.comp;
+
+        caixaParceira.largRender =
+          caixaParceira.larg;
+
+
+        caixasPosicionadas.push(
+          caixa,
+          caixaParceira
+        );
+
+        caixasProcessadasEmGrupo.add(caixa);
+        caixasProcessadasEmGrupo.add(caixaParceira);
+
+        espaçosLivres = removerAreaOcupada(espaçosLivres, {
+          x: melhorPosicaoGrupo.x,
+          y: melhorPosicaoGrupo.y,
+          comp: compGrupo,
+          larg: largGrupo,
+        });
+
+        return;
+      }
+    }
+
+    // Se não existir espaço físico para o agrupamento,
+    // segue normalmente com o posicionamento individual.
+
+    let melhorPosicao = null;
+
+    espaçosLivres.forEach((espaco) => {
+    const orientacoes = [
+    {
+      comp: caixa.comp,
+      larg: caixa.larg,
+    },
+  ];
+
+      orientacoes.forEach((orientacao) => {
+        const cabeNoEspaco =
+          orientacao.comp <= espaco.comp + 0.01 &&
+          orientacao.larg <= espaco.larg + 0.01;
+
+        if (!cabeNoEspaco) {
+          return;
+        }
+
+        let posicaoX = espaco.x;
+        let posicaoY = espaco.y;
+        let pontuacao = 0;
+
+        if (caixa.ehCargaPesada) {
+          const posicaoIdealX =
+            centroZonaEixos -
+            orientacao.comp / 2;
+
+          const posicaoIdealY =
+            veiculo.largFisica / 2 -
+            orientacao.larg / 2;
+
+          const maximoX =
+            espaco.x +
+            espaco.comp -
+            orientacao.comp;
+
+          const maximoY =
+            espaco.y +
+            espaco.larg -
+            orientacao.larg;
+
+          posicaoX = Math.max(
+            espaco.x,
+            Math.min(posicaoIdealX, maximoX),
+          );
+
+          posicaoY = Math.max(
+            espaco.y,
+            Math.min(posicaoIdealY, maximoY),
+          );
+
+          const centroCargaX =
+            posicaoX +
+            orientacao.comp / 2;
+
+          const centroCargaY =
+            posicaoY +
+            orientacao.larg / 2;
+
+          const distanciaEixos = Math.abs(
+            centroCargaX -
+            centroZonaEixos,
+          );
+
+          const distanciaLateral = Math.abs(
+            centroCargaY -
+            veiculo.largFisica / 2,
+          );
+
+          const desperdicio =
+            espaco.comp * espaco.larg -
+            orientacao.comp * orientacao.larg;
+
+          pontuacao =
+            distanciaEixos * 1000 +
+            distanciaLateral * 100 +
+            desperdicio;
+        } else {
+          /*
+            Carga leve:
+
+            1. prioriza a linha mais baixa;
+            2. avança da esquerda para a direita;
+            3. prefere orientação normal;
+            4. usa o menor espaço suficiente.
+          */
+         const desperdicio =
+    espaco.comp * espaco.larg -
+    orientacao.comp * orientacao.larg;
+
+  // =====================================================
+  // C4 - BALANCEAMENTO LATERAL PREDITIVO
+  //
+  // Em vez de centralizar esta caixa isoladamente,
+  // estima como ficará o CG lateral do conjunto caso
+  // esta posição seja escolhida.
+  // =====================================================
+
+  let pesoJaPosicionado = 0;
+  let momentoLateralAtual = 0;
+
+  caixasPosicionadas.forEach((caixaPosicionada) => {
+    const centroYCaixaPosicionada =
+      caixaPosicionada.Y_Fisico +
+      caixaPosicionada.largRender / 2;
+
+    pesoJaPosicionado +=
+      caixaPosicionada.pesoBloco;
+
+    momentoLateralAtual +=
+      centroYCaixaPosicionada *
+      caixaPosicionada.pesoBloco;
+  });
+
+  const centroCargaY =
+    posicaoY +
+    orientacao.larg / 2;
+
+  const pesoProjetado =
+    pesoJaPosicionado +
+    caixa.pesoBloco;
+
+  const momentoLateralProjetado =
+    momentoLateralAtual +
+    centroCargaY *
+    caixa.pesoBloco;
+
+  const cgLateralProjetado =
+    pesoProjetado > 0
+      ? momentoLateralProjetado / pesoProjetado
+      : veiculo.largFisica / 2;
+
+  const desvioCgLateralProjetado =
+    Math.abs(
+      cgLateralProjetado -
+      veiculo.largFisica / 2
+    );
+
+  pontuacao =
+    desvioCgLateralProjetado * 100 +
+    desperdicio;
+
+        }
+
+        if (
+          melhorPosicao === null ||
+          pontuacao < melhorPosicao.pontuacao
+        ) {
+          melhorPosicao = {
+            posicaoX,
+            posicaoY,
+            comp: orientacao.comp,
+            larg: orientacao.larg,
+            pontuacao,
+          };
+        }
+      });
+    });
+
+    if (melhorPosicao) {
+      caixa.X_Fisico =
+        melhorPosicao.posicaoX;
+
+      caixa.Y_Fisico =
+        melhorPosicao.posicaoY;
+
+      caixa.compRender =
+        melhorPosicao.comp;
+
+      caixa.largRender =
+        melhorPosicao.larg;
+
+      caixasPosicionadas.push(caixa);
+
+      espaçosLivres = removerAreaOcupada(espaçosLivres, {
+        x: caixa.X_Fisico,
+        y: caixa.Y_Fisico,
+        comp: caixa.compRender,
+        larg: caixa.largRender,
+      });
+
+      return;
+    }
+
+    if (posicionarCaixaComAET(caixa, veiculo)) {
+      caixasPosicionadas.push(caixa);
+      return;
+    }
+
+    globalEstorouMetragem = true;
+    globalItensExcedentes.push(caixa);
+
+    caixa.X_Fisico =
+      veiculo.compFisico +
+      0.2 +
+      (globalItensExcedentes.length - 1) *
+        (caixa.comp + 0.15);
+
+    caixa.Y_Fisico = 0;
+    caixa.compRender = caixa.comp;
+    caixa.largRender = caixa.larg;
+
+    caixasPosicionadas.push(caixa);
+  });
+
+  return espaçosLivres;
+}
+
+// =====================================================
+// C3 - AJUSTE DE CG E CLASSIFICAÇÃO DE PESO
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// desloca o conjunto de caixas para aproximar o CG da
+// zona dos eixos, calcula o CG final, aciona as análises
+// transversal/longitudinal e monta o diagnóstico de peso.
+// =====================================================
+
+function ajustarCgEClassificarPeso(caixasPosicionadas, veiculo, centroZonaEixos, inicioZonaEixos, fimZonaEixos) {
 if (!globalEstorouMetragem && caixasPosicionadas.length > 0) {
     const caixasDentroDoVeiculo = caixasPosicionadas.filter(
       (caixa) =>
@@ -3741,81 +3947,7 @@ caixasDentroDoVeiculo.forEach((caixa) => {
     centroGravidadeY = somaMomentoY / pesoTotalBlocos;
   }
 
-// =====================================================
-// C4 - ANÁLISE TRANSVERSAL / LATERAL
-// Diagnóstico experimental
-// =====================================================
-
-const centroLateralVeiculo =
-  veiculo.largFisica / 2;
-
-const desvioLateralMetros =
-  centroGravidadeY - centroLateralVeiculo;
-
-const desvioLateralAbsoluto =
-  Math.abs(desvioLateralMetros);
-
-const meiaLarguraUtil =
-  veiculo.largFisica / 2;
-
-const desvioLateralPercentual =
-  meiaLarguraUtil > 0
-    ? (desvioLateralAbsoluto / meiaLarguraUtil) * 100
-    : 0;
-
-let ladoDesvioLateral = "CENTRAL";
-
-if (desvioLateralMetros < -0.01) {
-  ladoDesvioLateral = "ESQUERDA";
-} else if (desvioLateralMetros > 0.01) {
-  ladoDesvioLateral = "DIREITA";
-}
-
-// =====================================================
-// C4 - CLASSIFICAÇÃO OPERACIONAL TRANSVERSAL
-// Critério interno de triagem matemática do DCPRO
-// =====================================================
-
-let nivelTransversalCg = "";
-let classificacaoTransversalCg = "";
-
-if (desvioLateralPercentual <= 10) {
-  nivelTransversalCg = "adequado";
-  classificacaoTransversalCg =
-    "ADEQUADO - distribuição lateral próxima do centro";
-} else if (desvioLateralPercentual <= 25) {
-  nivelTransversalCg = "atencao";
-  classificacaoTransversalCg =
-    "ATENÇÃO - concentração lateral afastada da região central";
-} else {
-  nivelTransversalCg = "critico";
-  classificacaoTransversalCg =
-    "CRÍTICO - concentração lateral significativamente afastada da região central";
-}
-
-// C4 - mensagem operacional da análise transversal
-let mensagemTransversalCg = null;
-
-if (nivelTransversalCg === "atencao") {
-  mensagemTransversalCg = {
-    nivel: "atencao",
-    titulo: "ATENÇÃO À DISTRIBUIÇÃO LATERAL DA CARGA",
-    mensagem:
-      `A distribuição estimada da carga apresenta concentração lateral para o lado ${ladoDesvioLateral.toLowerCase()}. ` +
-      "Recomenda-se revisar o posicionamento da carga antes da operação.",
-  };
-
-} else if (nivelTransversalCg === "critico") {
-  mensagemTransversalCg = {
-    nivel: "critico",
-    titulo: "DISTRIBUIÇÃO LATERAL CRÍTICA DA CARGA",
-    mensagem:
-      `A distribuição estimada da carga apresenta concentração lateral significativa para o lado ${ladoDesvioLateral.toLowerCase()}. ` +
-      "Recomenda-se revisar a disposição da carga antes de prosseguir.",
-  };
-}
-
-mensagemTransversalCgAtual = mensagemTransversalCg;
+mensagemTransversalCgAtual = calcularAnaliseTransversalCg(centroGravidadeY, veiculo);
 
 /*
   C3 - CLASSIFICAÇÃO DO EQUILÍBRIO LONGITUDINAL
@@ -3826,114 +3958,15 @@ mensagemTransversalCgAtual = mensagemTransversalCg;
   Esta classificação é interna e experimental.
 */
 
-const diferencaCgEixos =
-  Math.abs(
-    centroGravidadeX - centroZonaEixos,
-  );
+const {
+  diferencaCgEixos,
+  nivelCg,
+  classificacaoCg,
+  orientacaoLongitudinalCg,
+  ressalvaCg,
+} = calcularAnaliseLongitudinalCg(centroGravidadeX, centroZonaEixos, veiculo);
 
-let classificacaoCg = "";
-let nivelCg = "";
-
-if (diferencaCgEixos <= 0.5) {
-  classificacaoCg =
-    "ADEQUADO - CG próximo da região dos eixos";
-
-  nivelCg = "adequado";
-} else if (diferencaCgEixos <= 1) {
-  classificacaoCg =
-    "ATENÇÃO - CG afastado da região ideal";
-
-  nivelCg = "atencao";
-} else {
-  classificacaoCg =
-    "CRÍTICO - revisar distribuição da carga";
-
-  nivelCg = "critico";
-}
-
-// =====================================================
-// C4 - ANÁLISE LONGITUDINAL DA POSIÇÃO DO CG
-// =====================================================
-
-const percentualPosicaoCg =
-  (centroGravidadeX / veiculo.compFisico) * 100;
-
-let regiaoLongitudinalCg = "";
-let tendenciaLongitudinalCg = "";
-
-if (percentualPosicaoCg < 33.33) {
-  regiaoLongitudinalCg = "DIANTEIRA";
-  tendenciaLongitudinalCg =
-    "Concentração de peso com tendência para a região dianteira";
-} else if (percentualPosicaoCg <= 66.66) {
-  regiaoLongitudinalCg = "CENTRAL";
-  tendenciaLongitudinalCg =
-    "Concentração de peso predominantemente na região central";
-} else {
-  regiaoLongitudinalCg = "TRASEIRA";
-  tendenciaLongitudinalCg =
-    "Concentração de peso com tendência para a região traseira";
-}
-
-// =====================================================
-// C4 - ORIENTAÇÃO OPERACIONAL LONGITUDINAL
-// =====================================================
-
-let orientacaoLongitudinalCg = null;
-
-if (regiaoLongitudinalCg === "DIANTEIRA") {
-  orientacaoLongitudinalCg = {
-    regiao: "dianteira",
-    titulo: "CONCENTRAÇÃO LONGITUDINAL DIANTEIRA",
-    mensagem:
-      "A distribuição estimada apresenta maior concentração de peso na região dianteira do espaço útil. Recomenda-se verificar o posicionamento da carga antes da operação.",
-  };
-} else if (regiaoLongitudinalCg === "TRASEIRA") {
-  orientacaoLongitudinalCg = {
-    regiao: "traseira",
-    titulo: "CONCENTRAÇÃO LONGITUDINAL TRASEIRA",
-    mensagem:
-      "A distribuição estimada apresenta maior concentração de peso na região traseira do espaço útil. Recomenda-se verificar o posicionamento da carga antes da operação.",
-  };
-}
-
-orientacaoLongitudinalCgAtual =
-  orientacaoLongitudinalCg;
-
-/*
-  C3 - RESSALVA OPERACIONAL DO CENTRO DE GRAVIDADE
-
-  Gera uma orientação para a interface quando
-  o CG final não estiver classificado como adequado.
-
-  Esta análise é estimada e não substitui a
-  verificação operacional da distribuição por eixo.
-*/
-
-let ressalvaCg = null;
-
-if (nivelCg === "atencao") {
-  ressalvaCg = {
-    nivel: "atencao",
-
-    titulo:
-      "ATENÇÃO À DISTRIBUIÇÃO DA CARGA",
-
-    mensagem:
-      "O centro de gravidade estimado ficou afastado da região ideal. Revise o posicionamento da carga antes da operação.",
-  };
-} else if (nivelCg === "critico") {
-  ressalvaCg = {
-    nivel: "critico",
-
-    titulo:
-      "DISTRIBUIÇÃO CRÍTICA DA CARGA",
-
-    mensagem:
-      "O centro de gravidade estimado ficou significativamente afastado da região ideal. Recomenda-se revisar a disposição da carga antes de prosseguir.",
-  };
-}
-
+orientacaoLongitudinalCgAtual = orientacaoLongitudinalCg;
 ressalvaCgAtual = ressalvaCg;
 
 /*
@@ -4040,6 +4073,99 @@ const diagnosticoCg = {
     classificacaoCg,
 };
 
+  return { pesoTotalBlocos, centroGravidadeX, centroGravidadeY };
+}
+
+function renderizarArrumacaoLogica(
+  veiculo,
+  itens,
+  svgID,
+  legendaID,
+  dimensaoID,
+) {
+  const svgCima = document.getElementById(svgID);
+
+  const legendaContainer = document.getElementById(legendaID);
+
+  const txtDimensoes = document.getElementById(dimensaoID);
+
+  svgCima.innerHTML = "";
+  legendaContainer.innerHTML = "";
+  globalEstorouMetragem = false;
+  globalItensExcedentes = [];
+
+  const larguraMaximaCanvasGeral = 900;
+  const alturaCanvasGeral = 280;
+  const margemBorda = 14;
+
+  const comprimentoReferenciaVisual = 13.5;
+  const larguraReferenciaVisual = 2.45;
+
+  const escalaGlobalX =
+    (larguraMaximaCanvasGeral - margemBorda * 2) / comprimentoReferenciaVisual;
+
+  const escalaGlobalY =
+    (alturaCanvasGeral - margemBorda * 2) / larguraReferenciaVisual;
+
+  let larguraBauPixels = veiculo.compFisico * escalaGlobalX;
+  let alturaBauPixels = veiculo.largFisica * escalaGlobalY;
+
+    renderizarLegendaAgrupada(itens, legendaContainer);
+
+  let caixasIndividuais = montarCaixasIndividuais(itens, veiculo);
+
+const { inicioZonaEixos, fimZonaEixos, centroZonaEixos } =
+  classificarCaixasPorPeso(caixasIndividuais, veiculo);
+
+let espaçosLivres = [
+  {
+    x: 0,
+    y: 0,
+    comp: veiculo.compFisico,
+    larg: veiculo.largFisica,
+  },
+];
+
+let caixasPosicionadas = [];
+
+espaçosLivres = posicionarCaixasNoEspaco(
+  caixasIndividuais,
+  veiculo,
+  centroZonaEixos,
+  espaçosLivres,
+  caixasPosicionadas,
+);
+
+
+/*
+  C3 - FALLBACK DE ARRUMAÇÃO FÍSICA
+
+  Se a distribuição otimizada por peso não conseguiu
+  acomodar todos os blocos, tenta novamente usando uma
+  arrumação compacta puramente geométrica.
+
+  Assim, uma tentativa ruim de balanceamento não faz uma
+  carga fisicamente compatível ser considerada excedente.
+*/
+
+let usouFallbackFisico = false;
+
+if (globalEstorouMetragem) {
+  const arrumacaoFallback =
+    tentarArrumacaoCompacta(caixasIndividuais, veiculo, centroZonaEixos);
+
+  if (arrumacaoFallback) {
+    caixasPosicionadas = arrumacaoFallback;
+globalEstorouMetragem = false;
+globalItensExcedentes = [];
+
+usouFallbackFisico = true;
+  }
+}
+
+const { pesoTotalBlocos, centroGravidadeX, centroGravidadeY } =
+  ajustarCgEClassificarPeso(caixasPosicionadas, veiculo, centroZonaEixos, inicioZonaEixos, fimZonaEixos);
+
   let maiorX = larguraBauPixels;
 
 caixasPosicionadas.forEach((c) => {
@@ -4093,195 +4219,7 @@ let tamanhoFinalW = Math.max(
 
   desenharCaixasNoMapa(svgCima, caixasPosicionadas, veiculo, offsetX, offsetY, escalaGlobalX, escalaGlobalY);
 
-  // =====================================================
-  // C3 - CENTROS INTERNOS + PAINEL EXTERNO
-  // =====================================================
-
-  if (pesoTotalBlocos > 0) {
-    // Centro de gravidade da carga em pixels
-    const cgPixelX =
-      offsetX + centroGravidadeX * escalaGlobalX;
-
-    const cgPixelY =
-      offsetY + centroGravidadeY * escalaGlobalY;
-
-    // Centro geométrico do veículo em pixels
-    const centroVeiculoPixelX =
-      offsetX + (veiculo.compFisico / 2) * escalaGlobalX;
-
-    const centroVeiculoPixelY =
-      offsetY + (veiculo.largFisica / 2) * escalaGlobalY;
-
-    const grupoComparacao = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "g"
-    );
-
-    grupoComparacao.setAttribute(
-      "class",
-      "comparacao-centro-gravidade"
-    );
-
-    // ===================================================
-    // LINHA TRACEJADA ENTRE OS DOIS CENTROS
-    // ===================================================
-
-    const linhaDeslocamento = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "line"
-    );
-
-    linhaDeslocamento.setAttribute("x1", centroVeiculoPixelX);
-    linhaDeslocamento.setAttribute("y1", centroVeiculoPixelY);
-    linhaDeslocamento.setAttribute("x2", cgPixelX);
-    linhaDeslocamento.setAttribute("y2", cgPixelY);
-    linhaDeslocamento.setAttribute("stroke", "#64748b");
-    linhaDeslocamento.setAttribute("stroke-width", "1.5");
-    linhaDeslocamento.setAttribute("stroke-dasharray", "4 4");
-    linhaDeslocamento.setAttribute("opacity", "0.7");
-
-    grupoComparacao.appendChild(linhaDeslocamento);
-
-    // ===================================================
-    // CENTRO DO VEÍCULO - PONTO AZUL DISCRETO
-    // ===================================================
-
-    const pontoCentroVeiculo = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "circle"
-    );
-
-    pontoCentroVeiculo.setAttribute("cx", centroVeiculoPixelX);
-    pontoCentroVeiculo.setAttribute("cy", centroVeiculoPixelY);
-    pontoCentroVeiculo.setAttribute("r", "4");
-    pontoCentroVeiculo.setAttribute("fill", "#2563eb");
-    pontoCentroVeiculo.setAttribute("stroke", "#ffffff");
-    pontoCentroVeiculo.setAttribute("stroke-width", "1.5");
-
-    grupoComparacao.appendChild(pontoCentroVeiculo);
-
-    const tituloCentroVeiculo = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "title"
-    );
-
-    tituloCentroVeiculo.textContent =
-      `Centro geométrico do veículo: ` +
-      `X ${(veiculo.compFisico / 2).toFixed(2)} m | ` +
-      `Y ${(veiculo.largFisica / 2).toFixed(2)} m`;
-
-    pontoCentroVeiculo.appendChild(tituloCentroVeiculo);
-
-    // ===================================================
-    // CG DA CARGA - PONTO VERMELHO DISCRETO
-    // ===================================================
-
-    const pontoCG = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "circle"
-    );
-
-    pontoCG.setAttribute("cx", cgPixelX);
-    pontoCG.setAttribute("cy", cgPixelY);
-    pontoCG.setAttribute("r", "4");
-    pontoCG.setAttribute("fill", "#dc2626");
-    pontoCG.setAttribute("stroke", "#ffffff");
-    pontoCG.setAttribute("stroke-width", "1.5");
-
-    grupoComparacao.appendChild(pontoCG);
-
-    const tituloCG = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "title"
-    );
-
-    tituloCG.textContent =
-      `Centro de gravidade da carga: ` +
-      `X ${centroGravidadeX.toFixed(2)} m | ` +
-      `Y ${centroGravidadeY.toFixed(2)} m`;
-
-    pontoCG.appendChild(tituloCG);
-
-    // ===================================================
-    // PAINEL ABAIXO DO VEÍCULO
-    // ===================================================
-
-    const painelX = offsetX;
-    const painelY = offsetY + alturaBauPixels + 22;
-    const painelLargura = Math.max(larguraBauPixels, 260);
-    const painelAltura = 48;
-
-    const fundoPainel = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "rect"
-    );
-
-    fundoPainel.setAttribute("x", painelX);
-    fundoPainel.setAttribute("y", painelY);
-    fundoPainel.setAttribute("width", painelLargura);
-    fundoPainel.setAttribute("height", painelAltura);
-    fundoPainel.setAttribute("rx", "7");
-    fundoPainel.setAttribute("fill", "#f8fafc");
-    fundoPainel.setAttribute("stroke", "#cbd5e1");
-    fundoPainel.setAttribute("stroke-width", "1");
-
-    grupoComparacao.appendChild(fundoPainel);
-
-    // Linha vertical ligando o CG ao painel
-    const linhaGuiaCG = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "line"
-    );
-
-    linhaGuiaCG.setAttribute("x1", cgPixelX);
-    linhaGuiaCG.setAttribute("y1", cgPixelY + 6);
-    linhaGuiaCG.setAttribute("x2", cgPixelX);
-    linhaGuiaCG.setAttribute("y2", painelY);
-    linhaGuiaCG.setAttribute("stroke", "#dc2626");
-    linhaGuiaCG.setAttribute("stroke-width", "1.5");
-    linhaGuiaCG.setAttribute("stroke-dasharray", "3 3");
-    linhaGuiaCG.setAttribute("opacity", "0.7");
-
-    grupoComparacao.appendChild(linhaGuiaCG);
-
-    // Legenda do centro do veículo
-    const textoCentroVeiculo = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "text"
-    );
-
-    textoCentroVeiculo.setAttribute("x", painelX + 12);
-    textoCentroVeiculo.setAttribute("y", painelY + 19);
-    textoCentroVeiculo.setAttribute("font-size", "10");
-    textoCentroVeiculo.setAttribute("font-weight", "700");
-    textoCentroVeiculo.setAttribute("fill", "#2563eb");
-
-    textoCentroVeiculo.textContent =
-      `● Centro do veículo: X ${(veiculo.compFisico / 2).toFixed(2)} m | ` +
-      `Y ${(veiculo.largFisica / 2).toFixed(2)} m`;
-
-    grupoComparacao.appendChild(textoCentroVeiculo);
-
-    // Legenda do centro de gravidade
-    const textoCG = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "text"
-    );
-
-    textoCG.setAttribute("x", painelX + 12);
-    textoCG.setAttribute("y", painelY + 37);
-    textoCG.setAttribute("font-size", "10");
-    textoCG.setAttribute("font-weight", "700");
-    textoCG.setAttribute("fill", "#dc2626");
-
-    textoCG.textContent =
-      `● CG da carga: X ${centroGravidadeX.toFixed(2)} m | ` +
-      `Y ${centroGravidadeY.toFixed(2)} m`;
-
-    grupoComparacao.appendChild(textoCG);
-
-    svgCima.appendChild(grupoComparacao);
-  }
+  desenharPainelComparacaoCG(svgCima, pesoTotalBlocos, centroGravidadeX, centroGravidadeY, veiculo, offsetX, offsetY, alturaBauPixels, larguraBauPixels, escalaGlobalX, escalaGlobalY);
 
   const resumoExcedente = document.getElementById("resumo-excedente");
 }
@@ -4382,14 +4320,17 @@ if (atencaoDistribuicao) {
       const qtd = parseInt(tr.querySelector(".qtd")?.value) || 0;
 
       const comp =
-        (parseFloat(tr.querySelector(".comp")?.value.replace(",", ".")) || 0) /
-        100;
+        (parseFloat(
+          tr.querySelector(".comp")?.value.replace(/\./g, "").replace(",", "."),
+        ) || 0) / 100;
       const larg =
-        (parseFloat(tr.querySelector(".larg")?.value.replace(",", ".")) || 0) /
-        100;
+        (parseFloat(
+          tr.querySelector(".larg")?.value.replace(/\./g, "").replace(",", "."),
+        ) || 0) / 100;
       const alt =
-        (parseFloat(tr.querySelector(".alt")?.value.replace(",", ".")) || 0) /
-        100;
+        (parseFloat(
+          tr.querySelector(".alt")?.value.replace(/\./g, "").replace(",", "."),
+        ) || 0) / 100;
 
       const peso =
         Number(
@@ -5055,14 +4996,17 @@ if (distribuicaoAtencao) {
     const qtd = parseInt(tr.querySelector(".qtd")?.value) || 0;
 
     const comp =
-      (parseFloat(tr.querySelector(".comp")?.value.replace(",", ".")) || 0) /
-      100;
+      (parseFloat(
+        tr.querySelector(".comp")?.value.replace(/\./g, "").replace(",", "."),
+      ) || 0) / 100;
     const larg =
-      (parseFloat(tr.querySelector(".larg")?.value.replace(",", ".")) || 0) /
-      100;
+      (parseFloat(
+        tr.querySelector(".larg")?.value.replace(/\./g, "").replace(",", "."),
+      ) || 0) / 100;
     const alt =
-      (parseFloat(tr.querySelector(".alt")?.value.replace(",", ".")) || 0) /
-      100;
+      (parseFloat(
+        tr.querySelector(".alt")?.value.replace(/\./g, "").replace(",", "."),
+      ) || 0) / 100;
 
     const peso =
       Number(
@@ -5294,6 +5238,14 @@ doc.text(statusRelatorio, 105, 102, { align: "center" });
 }
 
 function limparTudo() {
+  const confirmou = confirm(
+    "Tem certeza que deseja apagar todos os itens da tabela? Essa ação não pode ser desfeita.",
+  );
+
+  if (!confirmou) {
+    return;
+  }
+
   localStorage.removeItem("dcpro_carga");
 
   const tbody = document.querySelector("#tabela-carga tbody");
@@ -5397,6 +5349,218 @@ function carregarCargaSalva() {
   });
 
   atualizarLabelsEcores();
+}
+
+// =====================================================
+// HISTÓRICO DE CÁLCULOS RECENTES
+// =====================================================
+
+function salvarNoHistorico() {
+  const itens = [];
+
+  document.querySelectorAll("#tabela-carga tbody tr").forEach((linha) => {
+    itens.push({
+      nome: linha.querySelector(".nome")?.value || "",
+      qtd: linha.querySelector(".qtd")?.value || "",
+      comp: linha.querySelector(".comp")?.value || "",
+      larg: linha.querySelector(".larg")?.value || "",
+      alt: linha.querySelector(".alt")?.value || "",
+      peso: linha.querySelector(".peso")?.value || "",
+    });
+  });
+
+  const selectVeiculo = document.getElementById("select-veiculo");
+  const veiculoTexto = selectVeiculo
+    ? selectVeiculo.options[selectVeiculo.selectedIndex]?.text || ""
+    : "";
+
+  const historico = JSON.parse(
+    localStorage.getItem("dcpro_historico") || "[]",
+  );
+
+  const ultimaEntrada = historico[0];
+  const mesmoConteudo =
+    ultimaEntrada &&
+    JSON.stringify(ultimaEntrada.itens) === JSON.stringify(itens);
+
+  if (!mesmoConteudo) {
+    historico.unshift({
+      data: new Date().toLocaleString("pt-BR"),
+      itens,
+      veiculo: veiculoTexto,
+    });
+  }
+
+  while (historico.length > 10) {
+    historico.pop();
+  }
+
+  localStorage.setItem("dcpro_historico", JSON.stringify(historico));
+}
+
+// =====================================================
+// EXPORTAR / IMPORTAR CARGA EM ARQUIVO JSON
+// =====================================================
+
+function exportarCargaJSON() {
+  const itens = [];
+
+  document.querySelectorAll("#tabela-carga tbody tr").forEach((linha) => {
+    itens.push({
+      nome: linha.querySelector(".nome")?.value || "",
+      qtd: linha.querySelector(".qtd")?.value || "",
+      comp: linha.querySelector(".comp")?.value || "",
+      larg: linha.querySelector(".larg")?.value || "",
+      alt: linha.querySelector(".alt")?.value || "",
+      peso: linha.querySelector(".peso")?.value || "",
+    });
+  });
+
+  if (itens.length === 0) {
+    alert("Não há itens na tabela para exportar.");
+    return;
+  }
+
+  const conteudo = JSON.stringify(itens, null, 2);
+  const blob = new Blob([conteudo], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const dataFormatada = new Date()
+    .toLocaleDateString("pt-BR")
+    .split("/")
+    .reverse()
+    .join("-");
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `carga-dcpro-${dataFormatada}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
+}
+
+function importarCargaJSON(evento) {
+  const arquivo = evento.target.files[0];
+
+  if (!arquivo) {
+    return;
+  }
+
+  const leitor = new FileReader();
+
+  leitor.onload = function (leituraEvento) {
+    let itens;
+
+    try {
+      itens = JSON.parse(leituraEvento.target.result);
+    } catch (erro) {
+      alert("Não foi possível ler esse arquivo. Confira se é um JSON exportado pelo DCPRO.");
+      return;
+    }
+
+    if (!Array.isArray(itens) || itens.length === 0) {
+      alert("Esse arquivo não contém itens válidos para importar.");
+      return;
+    }
+
+    const tbody = document.querySelector("#tabela-carga tbody");
+    tbody.innerHTML = "";
+
+    itens.forEach((item) => {
+      adicionarLinha(false);
+
+      const linha = document.querySelector("#tabela-carga tbody tr:last-child");
+
+      linha.querySelector(".nome").value = item.nome || "";
+      linha.querySelector(".qtd").value = item.qtd || "1";
+      linha.querySelector(".comp").value = item.comp || "";
+      linha.querySelector(".larg").value = item.larg || "";
+      linha.querySelector(".alt").value = item.alt || "";
+      linha.querySelector(".peso").value = item.peso || "";
+    });
+
+    atualizarLabelsEcores();
+    salvarCarga();
+
+    evento.target.value = "";
+  };
+
+  leitor.readAsText(arquivo);
+}
+
+function toggleHistorico() {
+  const painel = document.getElementById("painel-historico");
+  if (!painel) return;
+
+  const abrindo = painel.style.display !== "block";
+  painel.style.display = abrindo ? "block" : "none";
+
+  if (abrindo) {
+    renderizarHistorico();
+  }
+}
+
+function renderizarHistorico() {
+  const lista = document.getElementById("lista-historico");
+  if (!lista) return;
+
+  const historico = JSON.parse(
+    localStorage.getItem("dcpro_historico") || "[]",
+  );
+
+  if (historico.length === 0) {
+    lista.innerHTML =
+      "<p class='historico-vazio'>Nenhum cálculo salvo ainda.</p>";
+    return;
+  }
+
+  lista.innerHTML = historico
+    .map(
+      (entrada, indice) => `
+        <div class="historico-item">
+          <div class="historico-info">
+            <strong>${entrada.data}</strong>
+            <span>${entrada.itens.length} item(ns) • ${entrada.veiculo}</span>
+          </div>
+          <button class="btn-carregar-historico" onclick="carregarDoHistorico(${indice})" type="button">
+            Carregar
+          </button>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function carregarDoHistorico(indice) {
+  const historico = JSON.parse(
+    localStorage.getItem("dcpro_historico") || "[]",
+  );
+
+  const entrada = historico[indice];
+  if (!entrada) return;
+
+  const tbody = document.querySelector("#tabela-carga tbody");
+  tbody.innerHTML = "";
+
+  entrada.itens.forEach((item) => {
+    adicionarLinha(false);
+
+    const linha = document.querySelector("#tabela-carga tbody tr:last-child");
+
+    linha.querySelector(".nome").value = item.nome || "";
+    linha.querySelector(".qtd").value = item.qtd || "1";
+    linha.querySelector(".comp").value = item.comp || "";
+    linha.querySelector(".larg").value = item.larg || "";
+    linha.querySelector(".alt").value = item.alt || "";
+    linha.querySelector(".peso").value = item.peso || "";
+  });
+
+  atualizarLabelsEcores();
+  salvarCarga();
+
+  document.getElementById("painel-historico").style.display = "none";
 }
 
 function verificarVeiculoPersonalizado() {

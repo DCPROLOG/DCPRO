@@ -145,7 +145,30 @@ class="logo-dcpro"
       <i class="fa-solid fa-trash"></i>
       <span>Limpar Tudo</span>
     </button>
+
+    <button class="btn-exportar-json" onclick="exportarCargaJSON()" type="button">
+      <i class="fa-solid fa-file-export"></i>
+      <span>Exportar</span>
+    </button>
+
+    <button class="btn-importar-json" onclick="document.getElementById('input-importar-json').click()" type="button">
+      <i class="fa-solid fa-file-import"></i>
+      <span>Importar</span>
+    </button>
+
+    <input
+      type="file"
+      id="input-importar-json"
+      accept=".json"
+      style="display: none;"
+      onchange="importarCargaJSON(event)"
+    />
   </div>
+
+  <button class="btn-historico" onclick="toggleHistorico()" type="button">
+    <i class="fa-solid fa-clock-rotate-left"></i>
+    <span>Histórico</span>
+  </button>
 
   <a
   href="src/veiculos-especiais-busca-inteligente.html"
@@ -156,6 +179,16 @@ class="logo-dcpro"
     <i class="fa-solid fa-book-open"></i>
     <span>Consultar Guia</span>
   </a>
+</div>
+
+<div id="painel-historico" class="painel-historico">
+  <div class="painel-historico-cabecalho">
+    <strong>Últimos cálculos</strong>
+    <button class="btn-fechar-historico" onclick="toggleHistorico()" type="button">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+  <div id="lista-historico"></div>
 </div>
 
       <div class="table-responsive">

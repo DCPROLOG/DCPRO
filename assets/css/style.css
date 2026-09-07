@@ -112,12 +112,19 @@ h2 {
 .table-responsive {
   width: 100%;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
+  max-height: 460px; /* ~8 linhas visíveis; ajuste este valor pra mostrar mais/menos */
   margin-top: 18px;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-x;
   border-radius: 16px;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.table-responsive thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 /* =====================================================
@@ -165,6 +172,22 @@ select:focus {
   outline: none;
   border-color: #3b82f6;
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+}
+input.campo-invalido {
+  border-color: #dc2626;
+  background-color: #fef2f2;
+}
+input.campo-invalido:focus {
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.15);
+}
+#tabela-carga tbody tr.linha-excedente {
+  background-color: #fff7ed;
+}
+#tabela-carga tbody tr.linha-excedente td {
+  border-color: #fb923c;
+}
+#tabela-carga tbody tr.linha-excedente .label-linha::after {
+  content: " ⚠️";
 }
 input[type="number"] {
   width: 78px;
@@ -298,6 +321,141 @@ padding: 6px 12px;
   height: 38px;
   padding: 0;
   font-size: 16px;
+}
+
+.btn-duplicar {
+  background: linear-gradient(135deg, #3b82f6, var(--cor-secundaria));
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-weight: 800;
+  border-radius: var(--radius-md);
+  transition: all 0.22s ease;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  font-size: 16px;
+  margin-right: 6px;
+}
+
+.btn-duplicar:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.22);
+}
+
+.btn-historico {
+  background: linear-gradient(135deg, #64748b, #475569);
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-weight: 800;
+  border-radius: var(--radius-md);
+  transition: all 0.22s ease;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin-left: 8px;
+}
+
+.btn-historico:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.22);
+}
+
+.btn-exportar-json,
+.btn-importar-json {
+  background: linear-gradient(135deg, #0ea5e9, #0284c7);
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-weight: 800;
+  border-radius: var(--radius-md);
+  transition: all 0.22s ease;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin-left: 8px;
+}
+
+.btn-exportar-json:hover,
+.btn-importar-json:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.22);
+}
+
+.painel-historico {
+  display: none;
+  background: var(--cor-branco);
+  border: 1px solid #dbe3ef;
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  margin-top: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.painel-historico-cabecalho {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #dbe3ef;
+  background: #f4f6f9;
+  position: sticky;
+  top: 0;
+}
+
+.btn-fechar-historico {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: #64748b;
+}
+
+.historico-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid #eef1f6;
+  gap: 10px;
+}
+
+.historico-info {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: var(--cor-texto);
+}
+
+.btn-carregar-historico {
+  background: linear-gradient(135deg, #3b82f6, var(--cor-secundaria));
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.historico-vazio {
+  padding: 16px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
 }
 
 .btn-calc,
@@ -959,4 +1117,87 @@ padding: 0 12px;
 
 .link-guia-limite:hover {
   color: #1d4ed8;
+}
+
+/* =======================================================
+   TABELA EM MODO CARTÃO - TELAS PEQUENAS (celular)
+
+   Abaixo de 640px, a tabela de itens deixa de rolar na
+   horizontal e cada linha vira um cartão empilhado, com
+   o nome do campo ao lado de cada valor.
+======================================================= */
+
+@media (max-width: 640px) {
+  .table-responsive {
+    overflow-x: visible;
+    max-height: 65vh;
+  }
+
+  #tabela-carga {
+    min-width: 0;
+    width: 100%;
+  }
+
+  #tabela-carga thead {
+    display: none;
+  }
+
+  #tabela-carga,
+  #tabela-carga tbody,
+  #tabela-carga tr,
+  #tabela-carga td {
+    display: block;
+    width: 100%;
+  }
+
+  #tabela-carga tr {
+    margin-bottom: 14px;
+    border: 1px solid #dbe3ef;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
+  }
+
+  #tabela-carga td {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    text-align: right;
+    position: relative;
+    padding: 10px 12px 10px 46%;
+    border: none;
+    border-bottom: 1px solid #eef1f6;
+    min-height: 44px;
+  }
+
+  #tabela-carga td:last-child {
+    border-bottom: none;
+  }
+
+  #tabela-carga td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 12px;
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--cor-primaria);
+    text-align: left;
+  }
+
+  #tabela-carga td input,
+  #tabela-carga td select {
+    width: 100%;
+    max-width: 160px;
+  }
+
+  #tabela-carga td[data-label="Ref / Cor"],
+  #tabela-carga td[data-label="Ação"] {
+    justify-content: center;
+    padding-left: 12px;
+  }
+
+  #tabela-carga td[data-label="Ref / Cor"]::before,
+  #tabela-carga td[data-label="Ação"]::before {
+    content: none;
+  }
 }
