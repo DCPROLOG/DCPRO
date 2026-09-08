@@ -1123,8 +1123,11 @@ padding: 0 12px;
    TABELA EM MODO CARTÃO - TELAS PEQUENAS (celular)
 
    Abaixo de 640px, a tabela de itens deixa de rolar na
-   horizontal e cada linha vira um cartão empilhado, com
-   o nome do campo ao lado de cada valor.
+   horizontal e cada linha vira um cartão empilhado. Cada
+   campo mostra o rótulo EM CIMA e o valor EMBAIXO dele,
+   ocupando a largura inteira do cartão — isso evita
+   qualquer corte horizontal, independente do tamanho do
+   rótulo ou do valor digitado.
 ======================================================= */
 
 @media (max-width: 640px) {
@@ -1156,18 +1159,16 @@ padding: 0 12px;
     border-radius: 14px;
     overflow: hidden;
     box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
+    padding: 6px 0;
   }
 
   #tabela-carga td {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    text-align: right;
-    position: relative;
-    padding: 10px 12px 10px 46%;
+    display: block;
+    text-align: left;
+    padding: 8px 12px;
     border: none;
     border-bottom: 1px solid #eef1f6;
-    min-height: 44px;
+    box-sizing: border-box;
   }
 
   #tabela-carga td:last-child {
@@ -1176,24 +1177,29 @@ padding: 0 12px;
 
   #tabela-carga td::before {
     content: attr(data-label);
-    position: absolute;
-    left: 12px;
+    display: block;
     font-weight: 700;
     font-size: 12px;
     color: var(--cor-primaria);
-    text-align: left;
+    margin-bottom: 4px;
   }
 
   #tabela-carga td input,
   #tabela-carga td select {
     width: 100%;
-    max-width: 160px;
+    max-width: none;
+    box-sizing: border-box;
   }
 
   #tabela-carga td[data-label="Ref / Cor"],
   #tabela-carga td[data-label="Ação"] {
+    text-align: center;
+  }
+
+  #tabela-carga td[data-label="Ação"] {
+    display: flex;
     justify-content: center;
-    padding-left: 12px;
+    gap: 8px;
   }
 
   #tabela-carga td[data-label="Ref / Cor"]::before,
@@ -1201,3 +1207,4 @@ padding: 0 12px;
     content: none;
   }
 }
+
