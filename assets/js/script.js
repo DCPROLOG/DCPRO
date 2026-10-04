@@ -1535,7 +1535,6 @@ function calcularCarga() {
         if (larg > maiorLargItem) maiorLargItem = larg;
         if (alt > maiorAltItem) maiorAltItem = alt;
 
-        // Substitua por este:
         if (
           comp > vSelecionado.compFisico ||
           larg > vSelecionado.largFisica ||
