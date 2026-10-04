@@ -6,7 +6,7 @@ O DCPRO tem como objetivo evoluir de um dimensionador de carga para uma platafor
 
 ---
 
-# V1.2 BETA (Atual)
+# V1.6 BETA (Atual)
 
 ## Sprint 1
 - [x] Correção do LocalStorage.
@@ -40,6 +40,22 @@ O DCPRO tem como objetivo evoluir de um dimensionador de carga para uma platafor
 - [x] Divisão inteligente de carga entre múltiplos veículos.
 - [x] Validação do SVG individual por veículo.
 - [x] Agrupamento correto dos itens por veículo.
+
+---
+
+## Sprint 5 — Testes, Correções Críticas e Edição Manual de Carga
+- [x] Suíte de testes automatizados (`testes.html`) para as funções centrais de cálculo.
+- [x] Correção da tolerância de margem na altura de empilhamento (1cm → 1mm).
+- [x] Correção do limite de unidades por pilha não verificado no mapa visual.
+- [x] Sugestão de veículo menor disponível (sem troca forçada).
+- [x] Rotação automática de itens no encaixe físico.
+- [x] Aba Personalizado: arrastar e girar caixas manualmente.
+- [x] Área de Espera para edição manual sem restrição de espaço.
+- [x] Avaliação ao vivo do centro de gravidade no modo Personalizado.
+- [x] Persistência do arranjo manual entre recálculos.
+- [x] Aba Personalizado na exportação em Excel.
+- [x] Bloqueio de exportação (PDF/Excel) com distribuição crítica ou caixas na Área de Espera.
+- [x] Redução do tamanho dos relatórios em PDF (compressão de imagem).
 
 ---
 
@@ -89,11 +105,13 @@ O DCPRO tem como objetivo evoluir de um dimensionador de carga para uma platafor
 
 # V3.0 — Plataforma
 
-- [ ] Login.
-- [ ] Banco de dados.
+**Status:** Iniciado (pausado) — estrutura de banco de dados e autenticação (Supabase) criada; tela de cadastro/login construída mas ainda não integrada ao projeto em produção.
+
+- [~] Login — tela e integração com Supabase Auth construídas, não publicadas.
+- [~] Banco de dados — tabelas `empresas` e `usuarios_empresa` criadas, com RLS (Row Level Security) configurado.
 - [ ] API.
 - [ ] Sistema online.
-- [ ] Multiusuário.
+- [x] Multiusuário — modelado no banco (empresa com múltiplos usuários, papéis admin/membro), pendente de tela de convite.
 - [ ] Painel administrativo.
 - [ ] Backup em nuvem.
 
@@ -121,4 +139,4 @@ O DCPRO tem como objetivo evoluir de um dimensionador de carga para uma platafor
 ---
 
 Última atualização:
-23/08/2026
+04/10/2026

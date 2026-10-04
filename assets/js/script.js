@@ -1,6 +1,6 @@
 // =====================================================
 // DCPRO - Dimensionador de Carga Pro
-// Versão: 1.2 BETA
+// // Versão: 1.6 BETA
 // Arquivo: script.js
 // =====================================================
 
@@ -33,8 +33,34 @@ const coresItens = [
 ];
 let globalEstorouMetragem = false;
 let globalItensExcedentes = [];
+
+// =====================================================
+// CRACHÁ PERMANENTE DE ITEM
+//
+// Cada item recebe um número que nunca muda, mesmo que a
+// lista seja reordenada (item adicionado/removido no meio).
+// Isso permite, no futuro, associar dados extras a um item
+// específico (como uma posição personalizada no mapa) sem
+// depender da posição dele na tabela.
+// =====================================================
+
+let proximoIdItem = 1;
 let trocaAutomaticaVeiculo = false;
 let avisoTrocaVeiculo = null;
+
+// Assinatura da carga atual (itens + veículo selecionado) e o
+// último arranjo manual salvo na aba Personalizado. Enquanto a
+// assinatura não mudar, o arranjo manual é restaurado a cada
+// recálculo em vez de ser substituído pelo automático.
+let assinaturaCargaAtual = "";
+let estadoPersonalizadoSalvo = null;
+
+// Guardam, por número de viagem/veículo, o arranjo manual atual
+// e sua avaliação ao vivo — para o PDF e o Excel conseguirem
+// refletir o modo Personalizado em vez de sempre o automático.
+let caixasPersonalizadasPorViagem = {};
+let avaliacoesPersonalizadoPorViagem = {};
+let sugestaoVeiculoMenor = null;;
 let alertaOperacionalAET = null;
 let ressalvaCgAtual = null;
 let mensagemTransversalCgAtual = null;
@@ -115,30 +141,34 @@ function formatarBR(valor) {
 // INTERFACE (UI)
 // =====================================================
 
-document.querySelector("#tabela-carga tbody").addEventListener(
-  "keydown",
-  function (evento) {
-    const noCampoDePeso = evento.target.classList.contains("peso");
+const tbodyCarga = document.querySelector("#tabela-carga tbody");
 
-    if (evento.key === "Enter" && noCampoDePeso) {
-      evento.preventDefault();
+if (tbodyCarga) {
+  tbodyCarga.addEventListener(
+    "keydown",
+    function (evento) {
+      const noCampoDePeso = evento.target.classList.contains("peso");
 
-      adicionarLinha();
+      if (evento.key === "Enter" && noCampoDePeso) {
+        evento.preventDefault();
 
-      const novaLinha = document.querySelector(
-        "#tabela-carga tbody tr:last-child",
-      );
+        adicionarLinha();
 
-      const primeiroCampo = novaLinha
-        ? novaLinha.querySelector(".nome")
-        : null;
+        const novaLinha = document.querySelector(
+          "#tabela-carga tbody tr:last-child",
+        );
 
-      if (primeiroCampo) {
-        primeiroCampo.focus();
+        const primeiroCampo = novaLinha
+          ? novaLinha.querySelector(".nome")
+          : null;
+
+        if (primeiroCampo) {
+          primeiroCampo.focus();
+        }
       }
-    }
-  },
-);
+    },
+  );
+}
 
 function atualizarLabelsEcores() {
   const lines = document.querySelectorAll("#tabela-carga tbody tr");
@@ -169,6 +199,7 @@ function adicionarLinha(salvar = true) {
     .getElementById("tabela-carga")
     .getElementsByTagName("tbody")[0];
   const novaLinha = tabela.insertRow();
+  novaLinha.dataset.itemId = proximoIdItem++;
 
   novaLinha.innerHTML = `
         <td data-label="Ref / Cor"><span class="label-linha">Item</span></td>
@@ -214,6 +245,7 @@ function duplicarLinha(botao) {
 
   const indiceAtual = Array.from(tabela.rows).indexOf(linhaAtual);
   const novaLinha = tabela.insertRow(indiceAtual + 1);
+  novaLinha.dataset.itemId = proximoIdItem++;
 
   novaLinha.innerHTML = `
         <td data-label="Ref / Cor"><span class="label-linha">Item</span></td>
@@ -366,6 +398,46 @@ comprimentoOk = true;
 }
 
 // =====================================================
+// SUGESTÃO DE VEÍCULO MENOR DISPONÍVEL
+//
+// Quando a carga cabe inteiramente no veículo escolhido
+// pelo usuário, verifica se algum veículo padrão MENOR
+// (peso, volume e arrumação física) também atenderia.
+// Não troca a seleção sozinho — apenas sinaliza a
+// possibilidade, para o usuário decidir.
+// =====================================================
+
+function verificarVeiculoMenorDisponivel(
+  veiculoAtual,
+  cargaAgrupada,
+  pesoTotal,
+  volumeTotal,
+) {
+  const indiceAtual = dbVeiculos.findIndex(
+    (veiculo) => veiculo.nome === veiculoAtual.nome,
+  );
+
+  // Veículo personalizado não faz parte do banco padrão.
+  if (indiceAtual <= 0) {
+    return null;
+  }
+
+  for (let i = 0; i < indiceAtual; i++) {
+    const candidato = dbVeiculos[i];
+
+    if (
+      pesoTotal <= candidato.pesoMax &&
+      volumeTotal <= candidato.volMax &&
+      testarArrumacaoFisica(candidato, cargaAgrupada)
+    ) {
+      return candidato;
+    }
+  }
+
+  return null;
+}
+
+// =====================================================
 // AGRUPAR UNIDADES IGUAIS PARA TESTE DE EMPILHAMENTO
 // =====================================================
 
@@ -408,6 +480,7 @@ const chave = ehPalletOuBase
     for (let i = 0; i < quantidade; i++) {
 grupos[chave].unidades.push({
   id: item.id,
+  crachaId: item.crachaId,
   nome: item.nome,
   alt: Number(item.alt) || 0,
   peso: Number(item.peso) || 0,
@@ -520,7 +593,7 @@ itensAgrupados.forEach((grupo) => {
 
       const cabePorAltura =
         novaAltura <=
-        veiculo.altFisica + 0.01;
+        veiculo.altFisica + 0.001;
 
       if (
         cabePorQuantidade &&
@@ -619,7 +692,7 @@ itensAgrupados.forEach((grupo) => {
 
       const cabePorAltura =
         novaAltura <=
-        veiculo.altFisica + 0.01;
+        veiculo.altFisica + 0.001;
 
       if (
         cabePorQuantidade &&
@@ -680,9 +753,15 @@ itensAgrupados.forEach((grupo) => {
   caixa.comp <= espaco.comp + 0.01 &&
   caixa.larg <= espaco.larg + 0.01;
 
-if (cabeNormal) {
-  const compReal = caixa.comp;
-  const largReal = caixa.larg;
+const cabeGirado =
+  caixa.larg <= espaco.comp + 0.01 &&
+  caixa.comp <= espaco.larg + 0.01;
+
+if (cabeNormal || cabeGirado) {
+  const usarGirado = !cabeNormal && cabeGirado;
+
+  const compReal = usarGirado ? caixa.larg : caixa.comp;
+  const largReal = usarGirado ? caixa.comp : caixa.larg;
 
         const espacoDireita = {
           x: espaco.x + compReal,
@@ -1108,8 +1187,27 @@ function planejarFrota(listaCarga, veiculoSelecionado = null) {
     viagem.maiorLargura = maiorLarg;
     viagem.maiorAltura = maiorAlt;
 
+    const veiculoMenor = verificarVeiculoMenorDisponivel(
+      veiculoSelecionado,
+      cargaAgrupada,
+      pesoTotal,
+      volumeTotal,
+    );
+
+    sugestaoVeiculoMenor = veiculoMenor
+      ? {
+          selecionado: veiculoSelecionado.nome,
+          menor: veiculoMenor.nome,
+          indiceMenor: dbVeiculos.findIndex(
+            (v) => v.nome === veiculoMenor.nome,
+          ),
+        }
+      : null;
+
     return [viagem];
   }
+
+  sugestaoVeiculoMenor = null;
 
   const veiculoInicial = escolherVeiculoIdeal(
     pesoTotal,
@@ -1449,6 +1547,7 @@ function calcularCarga() {
 
       listaCarga.push({
         id: index + 1,
+        crachaId: parseInt(linha.dataset.itemId, 10) || index + 1,
         nome: nome,
         qtd: qtd,
         comp: comp,
@@ -1465,6 +1564,19 @@ function calcularCarga() {
   let veiculoCalculado = null;
 let volMaxCalculado = 0;
 let cargas = [];
+
+  assinaturaCargaAtual = JSON.stringify({
+    veiculo: valorSelectVeiculo,
+    itens: listaCarga.map((i) => [
+      i.crachaId,
+      i.nome,
+      i.qtd,
+      i.comp,
+      i.larg,
+      i.alt,
+      i.peso,
+    ]),
+  });
 
   // --- LÓGICA DE EXIBIÇÃO E ALERTAS ---
 
@@ -1716,6 +1828,18 @@ if (listaCarga.length === 0) {
     `;
 
     avisoTrocaVeiculo = null;
+  } else if (sugestaoVeiculoMenor) {
+    divSugestao.style.display = "block";
+
+    divSugestao.innerHTML = `
+      💡 <strong>VEÍCULO MENOR DISPONÍVEL</strong><br>
+      Esta carga também cabe em um veículo menor:
+      <strong>${sugestaoVeiculoMenor.menor}</strong>
+      (selecionado atualmente: <strong>${sugestaoVeiculoMenor.selecionado}</strong>).<br>
+      <button type="button" class="btn-usar-sugestao" onclick="usarVeiculoSugerido(${sugestaoVeiculoMenor.indiceMenor})">
+        Usar ${sugestaoVeiculoMenor.menor}
+      </button>
+    `;
   } else {
     divSugestao.style.display = "none";
   }
@@ -2038,6 +2162,13 @@ if (divAlertaAET) {
   document.getElementById("bloco-resultados").style.display = "none";
 }
 
+function usarVeiculoSugerido(indice) {
+  document.getElementById("select-veiculo").value = indice;
+  verificarVeiculoPersonalizado();
+  sugestaoVeiculoMenor = null;
+  calcularCarga();
+}
+
 // =====================================================
 // RENDERIZAÇÃO DOS MAPAS E SVG
 // =====================================================
@@ -2084,19 +2215,70 @@ function criarMapaVeiculo(numero) {
         Dimensões Internas Disponíveis: -
     </div>
 
-    <div class="canvas-container">
-            <svg id="svg-${numero}"
-                 width="750"
-                 height="220"
-                 class="svg-mapa-carga">
-            </svg>
-        </div>
+    <div class="abas-veiculo">
+      <button class="aba-veiculo-btn aba-ativa" onclick="alternarAbaVeiculo(${numero}, 'automatico')" data-veiculo="${numero}" data-aba="automatico">
+        Automático
+      </button>
+      <button class="aba-veiculo-btn" onclick="alternarAbaVeiculo(${numero}, 'personalizado')" data-veiculo="${numero}" data-aba="personalizado">
+        Personalizado
+      </button>
+    </div>
 
-        <div class="legenda" id="legenda-${numero}"></div>
+    <div id="painel-automatico-${numero}" class="painel-aba-veiculo painel-aba-ativa">
+      <div class="canvas-container">
+              <svg id="svg-${numero}"
+                   width="750"
+                   height="220"
+                   class="svg-mapa-carga">
+              </svg>
+          </div>
+
+          <div class="legenda" id="legenda-${numero}"></div>
+    </div>
+
+    <div id="painel-personalizado-${numero}" class="painel-aba-veiculo">
+      <div class="aviso-personalizado">
+        ⚠️ <strong>MODO PERSONALIZADO — EDIÇÃO MANUAL.</strong>
+        A avaliação abaixo do desenho é recalculada a cada movimento
+        (centro de gravidade e caixas na Área de Espera). O resumo de
+        peso e volume e o selo de status no topo da página continuam
+        refletindo o <strong>cálculo automático original</strong>.
+        A responsabilidade pela distribuição final de peso, estabilidade
+        e amarração da carga é de quem realizar o carregamento — revise
+        cuidadosamente antes de usar este arranjo na prática.
+      </div>
+      <div id="avaliacao-personalizado-${numero}" class="avaliacao-personalizado"></div>
+      <div class="canvas-container">
+              <svg id="svg-personalizado-${numero}"
+                   width="750"
+                   height="220"
+                   class="svg-mapa-carga">
+              </svg>
+          </div>
+    </div>
 
     `;
 
   container.appendChild(bloco);
+}
+
+function alternarAbaVeiculo(numero, aba) {
+  const painelAutomatico = document.getElementById(`painel-automatico-${numero}`);
+  const painelPersonalizado = document.getElementById(`painel-personalizado-${numero}`);
+
+  if (painelAutomatico) {
+    painelAutomatico.classList.toggle("painel-aba-ativa", aba === "automatico");
+  }
+
+  if (painelPersonalizado) {
+    painelPersonalizado.classList.toggle("painel-aba-ativa", aba === "personalizado");
+  }
+
+  document
+    .querySelectorAll(`.aba-veiculo-btn[data-veiculo="${numero}"]`)
+    .forEach((botao) => {
+      botao.classList.toggle("aba-ativa", botao.dataset.aba === aba);
+    });
 }
 
 function posicionarCaixaComAET(caixa, veiculo) {
@@ -2463,7 +2645,565 @@ if (c.empilhados > 1) {
 }
 
 // =====================================================
-// PAINEL DE COMPARAÇÃO DO CENTRO DE GRAVIDADE
+// EDIÇÃO MANUAL DA ABA "PERSONALIZADO"
+//
+// Permite arrastar cada caixa (mudar de posição) e girar
+// 90° manualmente. As alterações ficam só na aba
+// Personalizado, em memória, até o próximo cálculo —
+// não afetam o mapa "Automático" nem são salvas.
+// =====================================================
+
+function caixasSeSobrepoem(a, b) {
+  const margem = 0.01;
+
+  return (
+    a.X_Fisico < b.X_Fisico + b.compRender - margem &&
+    a.X_Fisico + a.compRender > b.X_Fisico + margem &&
+    a.Y_Fisico < b.Y_Fisico + b.largRender - margem &&
+    a.Y_Fisico + a.largRender > b.Y_Fisico + margem
+  );
+}
+
+function posicaoValidaNoBau(caixa, veiculo) {
+  const margem = 0.01;
+
+  return (
+    caixa.X_Fisico >= -margem &&
+    caixa.Y_Fisico >= -margem &&
+    caixa.X_Fisico + caixa.compRender <= veiculo.compFisico + margem &&
+    caixa.Y_Fisico + caixa.largRender <= veiculo.largFisica + margem
+  );
+}
+
+function posicaoLivre(caixa, todasCaixas, veiculo) {
+  if (!posicaoValidaNoBau(caixa, veiculo)) {
+    return false;
+  }
+
+  return !todasCaixas.some(
+    (outra) =>
+      outra !== caixa &&
+      outra.zona === "veiculo" &&
+      caixasSeSobrepoem(caixa, outra),
+  );
+}
+
+function piscarAvisoCaixa(grupo) {
+  const rect = grupo.querySelector("rect");
+  if (!rect) return;
+
+  const corOriginal = rect.getAttribute("stroke");
+  const larguraOriginal = rect.getAttribute("stroke-width");
+
+  rect.setAttribute("stroke", "#dc2626");
+  rect.setAttribute("stroke-width", "3");
+
+  setTimeout(() => {
+    rect.setAttribute("stroke", corOriginal);
+    rect.setAttribute("stroke-width", larguraOriginal);
+  }, 350);
+}
+
+function desenharCaixaInterativa(grupo, c, escalaGlobalX, escalaGlobalY) {
+  grupo.innerHTML = "";
+
+  const widthPX = c.compRender * escalaGlobalX;
+  const heightPX = c.largRender * escalaGlobalY;
+
+  let rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  rect.setAttribute("x", 0);
+  rect.setAttribute("y", 0);
+  rect.setAttribute("width", widthPX);
+  rect.setAttribute("height", heightPX);
+  rect.setAttribute("fill", c.cor);
+  rect.setAttribute(
+    "stroke",
+    c.zona === "espera" ? "#64748b" : "#1f2937",
+  );
+  rect.setAttribute("stroke-width", "1.0");
+
+  if (c.zona === "espera") {
+    rect.setAttribute("stroke-dasharray", "4,3");
+  }
+
+  grupo.appendChild(rect);
+
+  if (widthPX > 24 && heightPX > 18) {
+    let textoMedida = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "text",
+    );
+
+    textoMedida.setAttribute("x", widthPX / 2);
+    textoMedida.setAttribute(
+      "y",
+      heightPX / 2 + (c.empilhados > 1 ? -4 : 3),
+    );
+    textoMedida.setAttribute("fill", "#ffffff");
+    textoMedida.setAttribute("font-size", "8.5px");
+    textoMedida.setAttribute("text-anchor", "middle");
+    textoMedida.style.pointerEvents = "none";
+    textoMedida.textContent =
+      `${(c.compRender * 100).toFixed(0)}x${(c.largRender * 100).toFixed(0)}`;
+    grupo.appendChild(textoMedida);
+  }
+
+  if (c.empilhados > 1) {
+    let textoQtd = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "text",
+    );
+
+    textoQtd.setAttribute("x", widthPX / 2);
+    textoQtd.setAttribute("y", heightPX / 2 + 7);
+    textoQtd.setAttribute("fill", "#ffffff");
+    textoQtd.setAttribute("font-size", "9px");
+    textoQtd.setAttribute("font-weight", "bold");
+    textoQtd.setAttribute("text-anchor", "middle");
+    textoQtd.style.pointerEvents = "none";
+    textoQtd.textContent = `${c.empilhados}x`;
+    grupo.appendChild(textoQtd);
+  }
+
+  // Botão de girar — o raio se adapta ao tamanho da caixa
+  // na tela, então aparece mesmo em caixas finas e compridas
+  // (que são justamente as que mais se beneficiam de girar).
+  const raioBotao = Math.min(7, widthPX / 2 - 1, heightPX / 2 - 1);
+
+  if (raioBotao >= 4) {
+    let botaoGirar = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "circle",
+    );
+
+    botaoGirar.setAttribute("cx", widthPX - raioBotao - 1);
+    botaoGirar.setAttribute("cy", raioBotao + 1);
+    botaoGirar.setAttribute("r", raioBotao);
+    botaoGirar.setAttribute("fill", "#ffffff");
+    botaoGirar.setAttribute("stroke", "#1f2937");
+    botaoGirar.setAttribute("stroke-width", "1");
+    botaoGirar.style.cursor = "pointer";
+    botaoGirar.classList.add("botao-girar-caixa");
+    grupo.appendChild(botaoGirar);
+
+    if (raioBotao >= 6) {
+      let iconeGirar = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "text",
+      );
+
+      iconeGirar.setAttribute("x", widthPX - raioBotao - 1);
+      iconeGirar.setAttribute("y", raioBotao + 3);
+      iconeGirar.setAttribute("text-anchor", "middle");
+      iconeGirar.setAttribute("font-size", "9px");
+      iconeGirar.style.pointerEvents = "none";
+      iconeGirar.textContent = "⟳";
+      grupo.appendChild(iconeGirar);
+    }
+  }
+}
+
+function reorganizarEspera(caixasPosicionadas, areaEspera, escalaGlobalX, escalaGlobalY) {
+  const padding = 8;
+  let cursorX = areaEspera.x + padding;
+  let cursorY = areaEspera.y + padding;
+  let maiorAlturaLinha = 0;
+
+  caixasPosicionadas
+    .filter((c) => c.zona === "espera")
+    .forEach((c) => {
+      const widthPX = c.compRender * escalaGlobalX;
+      const heightPX = c.largRender * escalaGlobalY;
+
+      if (
+        cursorX + widthPX > areaEspera.x + areaEspera.largura &&
+        cursorX > areaEspera.x + padding
+      ) {
+        cursorX = areaEspera.x + padding;
+        cursorY += maiorAlturaLinha + padding;
+        maiorAlturaLinha = 0;
+      }
+
+      c.pxX = cursorX;
+      c.pxY = cursorY;
+
+      cursorX += widthPX + padding;
+      maiorAlturaLinha = Math.max(maiorAlturaLinha, heightPX);
+
+      if (typeof c.atualizarPosicaoTela === "function") {
+        c.atualizarPosicaoTela();
+      }
+    });
+}
+
+function salvarEstadoPersonalizado(caixa) {
+  if (
+    !estadoPersonalizadoSalvo ||
+    estadoPersonalizadoSalvo.assinatura !== assinaturaCargaAtual
+  ) {
+    estadoPersonalizadoSalvo = {
+      assinatura: assinaturaCargaAtual,
+      posicoes: {},
+    };
+  }
+
+  estadoPersonalizadoSalvo.posicoes[caixa.id] = {
+    X_Fisico: caixa.X_Fisico,
+    Y_Fisico: caixa.Y_Fisico,
+    compRender: caixa.compRender,
+    largRender: caixa.largRender,
+    zona: caixa.zona,
+  };
+}
+
+// =====================================================
+// AVALIAÇÃO AO VIVO DO ARRANJO MANUAL
+//
+// Recalcula o centro de gravidade real das caixas que estão
+// DENTRO do veículo (as da Área de Espera não contam) e reaproveita
+// as mesmas classificações do cálculo automático, para que o
+// modo Personalizado tenha o mesmo tipo de alerta.
+// =====================================================
+
+function avaliarArranjoPersonalizado(caixas, veiculo, centroZonaEixos) {
+  const noVeiculo = caixas.filter((c) => c.zona === "veiculo");
+  const naEspera = caixas.filter((c) => c.zona === "espera");
+
+  const pesoNoVeiculo = noVeiculo.reduce((t, c) => t + c.pesoBloco, 0);
+  const pesoNaEspera = naEspera.reduce((t, c) => t + c.pesoBloco, 0);
+
+  let cgX = null;
+  let cgY = null;
+  let analiseLongitudinal = null;
+  let mensagemTransversal = null;
+
+  if (pesoNoVeiculo > 0) {
+    let momentoX = 0;
+    let momentoY = 0;
+
+    noVeiculo.forEach((c) => {
+      momentoX += (c.X_Fisico + c.compRender / 2) * c.pesoBloco;
+      momentoY += (c.Y_Fisico + c.largRender / 2) * c.pesoBloco;
+    });
+
+    cgX = momentoX / pesoNoVeiculo;
+    cgY = momentoY / pesoNoVeiculo;
+
+    analiseLongitudinal = calcularAnaliseLongitudinalCg(
+      cgX,
+      centroZonaEixos,
+      veiculo,
+    );
+
+    mensagemTransversal = calcularAnaliseTransversalCg(cgY, veiculo);
+  }
+
+  const nivelLongitudinal = analiseLongitudinal
+    ? analiseLongitudinal.nivelCg
+    : "adequado";
+
+  const nivelTransversal = mensagemTransversal
+    ? mensagemTransversal.nivel
+    : "adequado";
+
+  const orientacao = analiseLongitudinal
+    ? analiseLongitudinal.orientacaoLongitudinalCg
+    : null;
+
+  let nivel = "aprovado";
+
+  if (nivelLongitudinal === "critico" || nivelTransversal === "critico") {
+    nivel = "critico";
+  } else if (naEspera.length > 0) {
+    nivel = "incompleto";
+  } else if (
+    nivelLongitudinal === "atencao" ||
+    nivelTransversal === "atencao" ||
+    orientacao
+  ) {
+    nivel = "atencao";
+  }
+
+  const mensagens = [];
+
+  if (analiseLongitudinal && analiseLongitudinal.ressalvaCg) {
+    mensagens.push(analiseLongitudinal.ressalvaCg.mensagem);
+  } else if (orientacao) {
+    mensagens.push(orientacao.mensagem);
+  }
+
+  if (mensagemTransversal) {
+    mensagens.push(mensagemTransversal.mensagem);
+  }
+
+  const detalhes = [];
+
+  if (cgX !== null) {
+    detalhes.push(
+      `CG longitudinal: ${cgX.toFixed(2)} m (região dos eixos: ${centroZonaEixos.toFixed(2)} m, diferença de ${analiseLongitudinal.diferencaCgEixos.toFixed(2)} m)`,
+    );
+
+    detalhes.push(
+      `CG lateral: ${cgY.toFixed(2)} m (centro do baú: ${(veiculo.largFisica / 2).toFixed(2)} m)`,
+    );
+  }
+
+  detalhes.push(
+    `Peso posicionado no veículo: ${pesoNoVeiculo.toFixed(2).replace(".", ",")} kg`,
+  );
+
+  if (naEspera.length > 0) {
+    detalhes.push(
+      `Na Área de Espera: ${naEspera.length} caixa(s), ${pesoNaEspera.toFixed(2).replace(".", ",")} kg`,
+    );
+  }
+
+  return {
+    nivel,
+    qtdEspera: naEspera.length,
+    cgX,
+    cgY,
+    pesoNoVeiculo,
+    mensagens,
+    detalhes,
+  };
+}
+
+function renderizarAvaliacaoPersonalizada(numero, avaliacao) {
+  const alvo = document.getElementById(`avaliacao-personalizado-${numero}`);
+
+  if (!alvo) return;
+
+  const titulos = {
+    aprovado: "✅ ARRANJO MANUAL APROVADO",
+    atencao: "⚠️ ATENÇÃO À DISTRIBUIÇÃO DA CARGA",
+    critico: "⛔ DISTRIBUIÇÃO CRÍTICA DA CARGA",
+    incompleto: `⏳ ARRANJO INCOMPLETO — ${avaliacao.qtdEspera} caixa(s) na Área de Espera`,
+  };
+
+  const complemento = {
+    aprovado:
+      "Centro de gravidade dentro da faixa adequada e todas as caixas posicionadas no veículo.",
+    atencao: "",
+    critico: "",
+    incompleto:
+      "Posicione todas as caixas dentro do veículo antes de usar este arranjo.",
+  };
+
+  const textoMensagens = [complemento[avaliacao.nivel]]
+    .concat(avaliacao.mensagens)
+    .filter(Boolean)
+    .join(" ");
+
+  alvo.className = `avaliacao-personalizado avaliacao-${avaliacao.nivel}`;
+
+  alvo.innerHTML = `
+    <strong>${titulos[avaliacao.nivel]}</strong>
+    ${textoMensagens ? `<div>${textoMensagens}</div>` : ""}
+    <ul>
+      ${avaliacao.detalhes.map((linha) => `<li>${linha}</li>`).join("")}
+    </ul>
+  `;
+}
+
+function desenharCaixasNoMapaInterativo(
+  svgPersonalizado,
+  caixasPosicionadas,
+  veiculo,
+  offsetX,
+  offsetY,
+  larguraBauPixels,
+  alturaBauPixels,
+  escalaGlobalX,
+  escalaGlobalY,
+  areaEspera,
+  aoAtualizar,
+) {
+  // Posiciona, antes de desenhar, toda caixa que já começa na
+  // área de espera (restaurada de um estado salvo, por exemplo).
+  reorganizarEspera(caixasPosicionadas, areaEspera, escalaGlobalX, escalaGlobalY);
+
+  // Salva o arranjo e reavalia o CG a cada alteração confirmada.
+  const salvarEAvaliar = (caixa) => {
+    salvarEstadoPersonalizado(caixa);
+
+    if (typeof aoAtualizar === "function") {
+      aoAtualizar(caixasPosicionadas);
+    }
+  };
+
+  caixasPosicionadas.forEach((c) => {
+    const grupo = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "g",
+    );
+
+    grupo.style.cursor = "grab";
+    grupo.classList.add("caixa-personalizada");
+
+    const posicaoInicialPx = () =>
+      c.zona === "espera"
+        ? { x: c.pxX, y: c.pxY }
+        : {
+            x: offsetX + c.X_Fisico * escalaGlobalX,
+            y: offsetY + c.Y_Fisico * escalaGlobalY,
+          };
+
+    let pxAtual = posicaoInicialPx();
+
+    const atualizarTransform = () => {
+      grupo.setAttribute(
+        "transform",
+        `translate(${pxAtual.x}, ${pxAtual.y})`,
+      );
+    };
+
+    c.atualizarPosicaoTela = () => {
+      pxAtual = { x: c.pxX, y: c.pxY };
+      atualizarTransform();
+    };
+
+    atualizarTransform();
+    desenharCaixaInterativa(grupo, c, escalaGlobalX, escalaGlobalY);
+    svgPersonalizado.appendChild(grupo);
+
+    let arrastando = false;
+    let inicioPointerX = 0;
+    let inicioPointerY = 0;
+    let pxInicioArraste = { x: 0, y: 0 };
+
+    const girarCaixa = () => {
+      const compAntigo = c.compRender;
+      const largAntigo = c.largRender;
+
+      c.compRender = largAntigo;
+      c.largRender = compAntigo;
+
+      if (c.zona === "veiculo" && !posicaoLivre(c, caixasPosicionadas, veiculo)) {
+        c.compRender = compAntigo;
+        c.largRender = largAntigo;
+        piscarAvisoCaixa(grupo);
+        return;
+      }
+
+      desenharCaixaInterativa(grupo, c, escalaGlobalX, escalaGlobalY);
+
+      if (c.zona === "espera") {
+        reorganizarEspera(caixasPosicionadas, areaEspera, escalaGlobalX, escalaGlobalY);
+      }
+
+      salvarEAvaliar(c);
+    };
+
+    grupo.addEventListener("pointerdown", (evento) => {
+      if (evento.target.closest(".botao-girar-caixa")) {
+        evento.stopPropagation();
+        girarCaixa();
+        return;
+      }
+
+      arrastando = true;
+      grupo.setPointerCapture(evento.pointerId);
+      grupo.style.cursor = "grabbing";
+
+      inicioPointerX = evento.clientX;
+      inicioPointerY = evento.clientY;
+      pxInicioArraste = { x: pxAtual.x, y: pxAtual.y };
+    });
+
+    // Clique duplo (ou toque duplo) gira a caixa não importa
+    // o tamanho dela na tela — não depende do botão aparecer.
+    grupo.addEventListener("dblclick", (evento) => {
+      evento.stopPropagation();
+      girarCaixa();
+    });
+
+    grupo.addEventListener("pointermove", (evento) => {
+      if (!arrastando) return;
+
+      const deltaXPixel = evento.clientX - inicioPointerX;
+      const deltaYPixel = evento.clientY - inicioPointerY;
+
+      pxAtual = {
+        x: pxInicioArraste.x + deltaXPixel,
+        y: pxInicioArraste.y + deltaYPixel,
+      };
+
+      atualizarTransform();
+    });
+
+    const finalizarArraste = () => {
+      if (!arrastando) return;
+
+      arrastando = false;
+      grupo.style.cursor = "grab";
+
+      const widthPX = c.compRender * escalaGlobalX;
+      const heightPX = c.largRender * escalaGlobalY;
+      const centroX = pxAtual.x + widthPX / 2;
+      const centroY = pxAtual.y + heightPX / 2;
+
+      const dentroDoVeiculo =
+        centroX >= offsetX &&
+        centroX <= offsetX + larguraBauPixels &&
+        centroY >= offsetY &&
+        centroY <= offsetY + alturaBauPixels;
+
+      const dentroDaEspera =
+        centroX >= areaEspera.x &&
+        centroX <= areaEspera.x + areaEspera.largura &&
+        centroY >= areaEspera.y &&
+        centroY <= areaEspera.y + areaEspera.altura;
+
+      const reverter = () => {
+        pxAtual = { x: pxInicioArraste.x, y: pxInicioArraste.y };
+        atualizarTransform();
+        piscarAvisoCaixa(grupo);
+      };
+
+      if (dentroDoVeiculo) {
+        const novoXFisico = (pxAtual.x - offsetX) / escalaGlobalX;
+        const novoYFisico = (pxAtual.y - offsetY) / escalaGlobalY;
+
+        const zonaAntiga = c.zona;
+        c.zona = "veiculo";
+        c.X_Fisico = novoXFisico;
+        c.Y_Fisico = novoYFisico;
+
+        if (!posicaoLivre(c, caixasPosicionadas, veiculo)) {
+          c.zona = zonaAntiga;
+          reverter();
+
+          if (zonaAntiga === "espera") {
+            reorganizarEspera(caixasPosicionadas, areaEspera, escalaGlobalX, escalaGlobalY);
+          }
+
+          return;
+        }
+
+        if (zonaAntiga === "espera") {
+          reorganizarEspera(caixasPosicionadas, areaEspera, escalaGlobalX, escalaGlobalY);
+        }
+
+        salvarEAvaliar(c);
+        return;
+      }
+
+      if (dentroDaEspera) {
+        c.zona = "espera";
+        reorganizarEspera(caixasPosicionadas, areaEspera, escalaGlobalX, escalaGlobalY);
+        salvarEAvaliar(c);
+        return;
+      }
+
+      // Soltou fora das duas áreas — volta pro lugar de antes.
+      reverter();
+    };
+
+    grupo.addEventListener("pointerup", finalizarArraste);
+    grupo.addEventListener("pointercancel", finalizarArraste);
+  });
+}
 //
 // Extraída de renderizarArrumacaoLogica em 2024 —
 // só desenha os pontos de CG/centro do veículo e o
@@ -2857,6 +3597,7 @@ function montarCaixasIndividuais(itens, veiculo) {
 
         caixasIndividuais.push({
           id: unidade.id,
+          crachaId: unidade.crachaId,
           nome: unidade.nome,
 
           comp: grupo.comp,
@@ -2920,12 +3661,12 @@ function montarCaixasIndividuais(itens, veiculo) {
           unidade.alt;
 
         const cabePorQuantidade =
-          pilha.unidades.length 
+          pilha.unidades.length <
           limiteQuantidade;
 
         const cabePorAltura =
           novaAltura <=
-          veiculo.altFisica + 0.01;
+          veiculo.altFisica + 0.001;
 
         if (
           cabePorQuantidade &&
@@ -2977,6 +3718,7 @@ function montarCaixasIndividuais(itens, veiculo) {
 
       caixasIndividuais.push({
         id: unidadeReferencia.id,
+        crachaId: unidadeReferencia.crachaId,
 
         nome:
           pilha.unidades.length > 1
@@ -3071,6 +3813,12 @@ function tentarArrumacaoCompacta(caixasOriginais, veiculo, centroZonaEixos) {
   {
     comp: caixa.comp,
     larg: caixa.larg,
+    girado: false,
+  },
+  {
+    comp: caixa.larg,
+    larg: caixa.comp,
+    girado: true,
   },
 ];
 
@@ -3088,6 +3836,7 @@ function tentarArrumacaoCompacta(caixasOriginais, veiculo, centroZonaEixos) {
 
         caixa.compRender = orientacao.comp;
         caixa.largRender = orientacao.larg;
+        caixa.girado = orientacao.girado;
 
         const espacoDireita = {
           x: espaco.x + orientacao.comp,
@@ -3571,6 +4320,12 @@ function posicionarCaixasNoEspaco(caixasIndividuais, veiculo, centroZonaEixos, e
     {
       comp: caixa.comp,
       larg: caixa.larg,
+      girado: false,
+    },
+    {
+      comp: caixa.larg,
+      larg: caixa.comp,
+      girado: true,
     },
   ];
 
@@ -3718,6 +4473,7 @@ function posicionarCaixasNoEspaco(caixasIndividuais, veiculo, centroZonaEixos, e
             posicaoY,
             comp: orientacao.comp,
             larg: orientacao.larg,
+            girado: orientacao.girado,
             pontuacao,
           };
         }
@@ -3736,6 +4492,9 @@ function posicionarCaixasNoEspaco(caixasIndividuais, veiculo, centroZonaEixos, e
 
       caixa.largRender =
         melhorPosicao.larg;
+
+      caixa.girado =
+        melhorPosicao.girado;
 
       caixasPosicionadas.push(caixa);
 
@@ -4219,6 +4978,115 @@ let tamanhoFinalW = Math.max(
 
   desenharCaixasNoMapa(svgCima, caixasPosicionadas, veiculo, offsetX, offsetY, escalaGlobalX, escalaGlobalY);
 
+  const svgPersonalizado = document.getElementById(
+    svgID.replace("svg-", "svg-personalizado-"),
+  );
+
+  if (svgPersonalizado) {
+    svgPersonalizado.innerHTML = "";
+
+    const alturaEspera = 130;
+    const offsetYEspera = offsetY + alturaBauPixels + 34;
+
+    svgPersonalizado.setAttribute("width", tamanhoFinalW);
+    svgPersonalizado.setAttribute(
+      "height",
+      offsetYEspera + alturaEspera + margemBorda + 30,
+    );
+
+    let bgRectPersonalizado = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bgRectPersonalizado.setAttribute("x", offsetX);
+    bgRectPersonalizado.setAttribute("y", offsetY);
+    bgRectPersonalizado.setAttribute("width", larguraBauPixels);
+    bgRectPersonalizado.setAttribute("height", alturaBauPixels);
+    bgRectPersonalizado.setAttribute("rx", "8");
+    bgRectPersonalizado.setAttribute("ry", "8");
+    bgRectPersonalizado.setAttribute("fill", "#f8fafc");
+    bgRectPersonalizado.setAttribute("stroke", "#1e40af");
+    bgRectPersonalizado.setAttribute("stroke-width", "3");
+    svgPersonalizado.appendChild(bgRectPersonalizado);
+
+    desenharLinhaCentralTransversal(svgPersonalizado, offsetX, offsetY, larguraBauPixels, alturaBauPixels);
+    desenharCabineReferencia(svgPersonalizado, offsetX, offsetY, alturaBauPixels);
+
+    const areaEspera = {
+      x: offsetX,
+      y: offsetYEspera,
+      largura: larguraBauPixels,
+      altura: alturaEspera,
+    };
+
+    let bgRectEspera = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bgRectEspera.setAttribute("x", areaEspera.x);
+    bgRectEspera.setAttribute("y", areaEspera.y);
+    bgRectEspera.setAttribute("width", areaEspera.largura);
+    bgRectEspera.setAttribute("height", areaEspera.altura);
+    bgRectEspera.setAttribute("rx", "8");
+    bgRectEspera.setAttribute("ry", "8");
+    bgRectEspera.setAttribute("fill", "#f1f5f9");
+    bgRectEspera.setAttribute("stroke", "#94a3b8");
+    bgRectEspera.setAttribute("stroke-width", "2");
+    bgRectEspera.setAttribute("stroke-dasharray", "6,4");
+    svgPersonalizado.appendChild(bgRectEspera);
+
+    let rotuloEspera = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    rotuloEspera.setAttribute("x", areaEspera.x + 10);
+    rotuloEspera.setAttribute("y", areaEspera.y - 10);
+    rotuloEspera.setAttribute("fill", "#64748b");
+    rotuloEspera.setAttribute("font-size", "12px");
+    rotuloEspera.setAttribute("font-weight", "bold");
+    rotuloEspera.textContent = "📦 Área de Espera — arraste uma caixa pra cá pra girar com espaço livre";
+    svgPersonalizado.appendChild(rotuloEspera);
+
+    // Restaura o último arranjo manual salvo, desde que a
+    // carga (itens + veículo) seja exatamente a mesma de quando
+    // foi salvo. Se mudou, cada caixa nasce no veículo, na
+    // posição que o cálculo automático encontrou.
+    const usarEstadoSalvo =
+      estadoPersonalizadoSalvo &&
+      estadoPersonalizadoSalvo.assinatura === assinaturaCargaAtual;
+
+    const caixasPersonalizadas = caixasPosicionadas.map((c) => {
+      const clone = { ...c, zona: "veiculo" };
+
+      if (usarEstadoSalvo && estadoPersonalizadoSalvo.posicoes[c.id]) {
+        Object.assign(clone, estadoPersonalizadoSalvo.posicoes[c.id]);
+      }
+
+      return clone;
+    });
+
+    const numeroVeiculo = svgID.replace("svg-", "");
+    caixasPersonalizadasPorViagem[numeroVeiculo] = caixasPersonalizadas;
+
+    const reavaliarPersonalizado = (caixasAtuais) => {
+      const avaliacao = avaliarArranjoPersonalizado(
+        caixasAtuais,
+        veiculo,
+        centroZonaEixos,
+      );
+
+      avaliacoesPersonalizadoPorViagem[numeroVeiculo] = avaliacao;
+      renderizarAvaliacaoPersonalizada(numeroVeiculo, avaliacao);
+    };
+
+    desenharCaixasNoMapaInterativo(
+      svgPersonalizado,
+      caixasPersonalizadas,
+      veiculo,
+      offsetX,
+      offsetY,
+      larguraBauPixels,
+      alturaBauPixels,
+      escalaGlobalX,
+      escalaGlobalY,
+      areaEspera,
+      reavaliarPersonalizado,
+    );
+
+    reavaliarPersonalizado(caixasPersonalizadas);
+  }
+
   desenharPainelComparacaoCG(svgCima, pesoTotalBlocos, centroGravidadeX, centroGravidadeY, veiculo, offsetX, offsetY, alturaBauPixels, larguraBauPixels, escalaGlobalX, escalaGlobalY);
 
   const resumoExcedente = document.getElementById("resumo-excedente");
@@ -4252,9 +5120,49 @@ const distribuicaoCritica =
 const operacaoNaoCompativel =
   textoSelo.includes("OPERAÇÃO NÃO COMPATÍVEL");
 
-if (distribuicaoCritica) {
+// Para cada veículo com a aba Personalizado ativa, usa a
+// avaliação ao vivo do arranjo manual em vez do automático —
+// o pior caso entre os veículos decide o status do relatório.
+let personalizadoCritico = false;
+let personalizadoIncompleto = false;
+let personalizadoAtencao = false;
+const detalhesPersonalizado = [];
+
+Object.keys(avaliacoesPersonalizadoPorViagem).forEach((numeroVeiculo) => {
+  const painel = document.getElementById(
+    `painel-personalizado-${numeroVeiculo}`,
+  );
+
+  const ativo = painel && painel.classList.contains("painel-aba-ativa");
+  if (!ativo) return;
+
+  const avaliacao = avaliacoesPersonalizadoPorViagem[numeroVeiculo];
+  if (!avaliacao) return;
+
+  if (avaliacao.nivel === "critico") personalizadoCritico = true;
+  else if (avaliacao.nivel === "incompleto") personalizadoIncompleto = true;
+  else if (avaliacao.nivel === "atencao") personalizadoAtencao = true;
+
+  detalhesPersonalizado.push(
+    `Veículo ${numeroVeiculo} (Personalizado): ${
+      avaliacao.mensagens.join(" ") || "centro de gravidade dentro da faixa adequada."
+    }`,
+  );
+});
+
+if (distribuicaoCritica || personalizadoCritico) {
   alert(
-    "O Excel não pode ser gerado porque a distribuição da carga foi classificada como CRÍTICA. Revise o posicionamento da carga antes de prosseguir.",
+    personalizadoCritico
+      ? "O Excel não pode ser gerado: o arranjo manual (aba Personalizado) de um ou mais veículos foi classificado como CRÍTICO. Revise a distribuição antes de exportar."
+      : "O Excel não pode ser gerado porque a distribuição da carga foi classificada como CRÍTICA. Revise o posicionamento da carga antes de prosseguir.",
+  );
+
+  return;
+}
+
+if (personalizadoIncompleto) {
+  alert(
+    "O Excel não pode ser gerado: existem caixas na Área de Espera (fora do veículo) em um ou mais veículos no modo Personalizado. Posicione todas as caixas antes de exportar.",
   );
 
   return;
@@ -4292,6 +5200,14 @@ if (atencaoRegulatoria) {
 if (atencaoDistribuicao) {
   textoStatus = "ATENÇÃO À DISTRIBUIÇÃO DA CARGA";
   textoDashboard = "REVISAR DISTRIBUIÇÃO";
+
+  corStatus = "FEF3C7";
+  corTexto = "92400E";
+}
+
+if (personalizadoAtencao && textoStatus === "CARGA APROVADA") {
+  textoStatus = "ATENÇÃO À DISTRIBUIÇÃO DA CARGA (ARRANJO MANUAL)";
+  textoDashboard = "REVISAR DISTRIBUIÇÃO (MANUAL)";
 
   corStatus = "FEF3C7";
   corTexto = "92400E";
@@ -4894,6 +5810,86 @@ const linhaC3Mensagem = 18 + cargas.length;
     XLSX.utils.book_append_sheet(wb, wsVeiculos, "Frota");
     XLSX.utils.book_append_sheet(wb, wsDistribuicao, "Distribuicao");
 
+    // =========================
+    // ABA PERSONALIZADO (só existe se algum veículo estiver
+    // com a aba Personalizado ativa no momento da exportação)
+    // =========================
+    const personalizadoLinhas = [
+      [
+        "Veículo",
+        "Caixa",
+        "Zona",
+        "Posição X (m)",
+        "Posição Y (m)",
+        "Comprimento usado (m)",
+        "Largura usado (m)",
+        "Girada",
+        "Peso (kg)",
+      ],
+    ];
+
+    Object.keys(avaliacoesPersonalizadoPorViagem).forEach((numeroVeiculo) => {
+      const painel = document.getElementById(
+        `painel-personalizado-${numeroVeiculo}`,
+      );
+
+      const ativo = painel && painel.classList.contains("painel-aba-ativa");
+      if (!ativo) return;
+
+      const caixas = caixasPersonalizadasPorViagem[numeroVeiculo] || [];
+
+      caixas.forEach((c) => {
+        const girada = Math.abs(c.compRender - c.comp) > 0.01;
+
+        personalizadoLinhas.push([
+          `Veículo ${numeroVeiculo}`,
+          c.nome,
+          c.zona === "espera" ? "Área de Espera" : "No veículo",
+          c.zona === "espera" ? "" : c.X_Fisico.toFixed(2),
+          c.zona === "espera" ? "" : c.Y_Fisico.toFixed(2),
+          c.compRender.toFixed(2),
+          c.largRender.toFixed(2),
+          girada ? "Sim" : "Não",
+          formatarBR(c.pesoBloco),
+        ]);
+      });
+
+      const avaliacao = avaliacoesPersonalizadoPorViagem[numeroVeiculo];
+
+      personalizadoLinhas.push(["", "", "", "", "", "", "", "", ""]);
+
+      personalizadoLinhas.push([
+        `Avaliação do Veículo ${numeroVeiculo}: ${avaliacao.nivel.toUpperCase()}`,
+        avaliacao.mensagens.join(" "),
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+      ]);
+    });
+
+    if (personalizadoLinhas.length > 1) {
+      const wsPersonalizado = XLSX.utils.aoa_to_sheet(personalizadoLinhas);
+      wsPersonalizado["!cols"] = [
+        { wch: 14 },
+        { wch: 22 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 20 },
+        { wch: 20 },
+        { wch: 10 },
+        { wch: 14 },
+      ];
+      wsPersonalizado["!autofilter"] = { ref: wsPersonalizado["!ref"] };
+      aplicarEstilo(wsPersonalizado, wsPersonalizado["!ref"]);
+
+      XLSX.utils.book_append_sheet(wb, wsPersonalizado, "Personalizado");
+    }
+
     XLSX.writeFile(wb, "Romaneio_" + codigoSimulacao + ".xlsx");
   } catch (e) {
     console.error("Erro:", e);
@@ -4933,9 +5929,42 @@ const distribuicaoCritica =
 const operacaoNaoCompativel =
   textoSelo.includes("OPERAÇÃO NÃO COMPATÍVEL");
 
-if (distribuicaoCritica) {
+// Mesma lógica do Excel: para cada veículo com a aba
+// Personalizado ativa, usa a avaliação ao vivo em vez do
+// automático — o pior caso entre os veículos decide o status.
+let personalizadoCritico = false;
+let personalizadoIncompleto = false;
+let personalizadoAtencao = false;
+
+Object.keys(avaliacoesPersonalizadoPorViagem).forEach((numeroVeiculo) => {
+  const painel = document.getElementById(
+    `painel-personalizado-${numeroVeiculo}`,
+  );
+
+  const ativo = painel && painel.classList.contains("painel-aba-ativa");
+  if (!ativo) return;
+
+  const avaliacao = avaliacoesPersonalizadoPorViagem[numeroVeiculo];
+  if (!avaliacao) return;
+
+  if (avaliacao.nivel === "critico") personalizadoCritico = true;
+  else if (avaliacao.nivel === "incompleto") personalizadoIncompleto = true;
+  else if (avaliacao.nivel === "atencao") personalizadoAtencao = true;
+});
+
+if (distribuicaoCritica || personalizadoCritico) {
   alert(
-    "O PDF não pode ser gerado porque a distribuição da carga foi classificada como CRÍTICA. Revise o posicionamento da carga antes de prosseguir.",
+    personalizadoCritico
+      ? "O PDF não pode ser gerado: o arranjo manual (aba Personalizado) de um ou mais veículos foi classificado como CRÍTICO. Revise a distribuição antes de exportar."
+      : "O PDF não pode ser gerado porque a distribuição da carga foi classificada como CRÍTICA. Revise o posicionamento da carga antes de prosseguir.",
+  );
+
+  return;
+}
+
+if (personalizadoIncompleto) {
+  alert(
+    "O PDF não pode ser gerado: existem caixas na Área de Espera (fora do veículo) em um ou mais veículos no modo Personalizado. Posicione todas as caixas antes de exportar.",
   );
 
   return;
@@ -4971,8 +6000,15 @@ if (distribuicaoAtencao) {
   corStatusRelatorio = [180, 83, 9];
 }
 
+if (personalizadoAtencao && statusRelatorio === "STATUS: CARGA APROVADA") {
+  statusRelatorio =
+    "STATUS: ATENÇÃO À DISTRIBUIÇÃO DA CARGA (ARRANJO MANUAL)";
+
+  corStatusRelatorio = [180, 83, 9];
+}
+
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
+  const doc = new jsPDF({ compress: true });
 
   const agora = new Date();
   const codigoSimulacao =
@@ -5130,13 +6166,16 @@ doc.text(statusRelatorio, 105, 102, { align: "center" });
 
       const alvoImagem = bloco;
 
+      // Escala 2 + JPEG: o layout ocupa 166 mm na página, então
+      // mais resolução que isso só aumenta o arquivo (antes: PNG
+      // com canal alfa em escala 3, cerca de 50 MB para 2 páginas).
       const canvas = await html2canvas(alvoImagem, {
-        scale: 3,
+        scale: 2,
         backgroundColor: "#ffffff",
         useCORS: true,
       });
 
-      const imgData = canvas.toDataURL("image/png");
+      const imgData = canvas.toDataURL("image/jpeg", 0.88);
 
       const imgWidth = 170;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
@@ -5150,7 +6189,7 @@ doc.text(statusRelatorio, 105, 102, { align: "center" });
       doc.setFillColor(255, 255, 255);
       doc.roundedRect(20, yLayout - 2, 170, imgHeight + 4, 2, 2, "FD");
 
-      doc.addImage(imgData, "PNG", 22, yLayout, 166, imgHeight);
+      doc.addImage(imgData, "JPEG", 22, yLayout, 166, imgHeight);
 
       yLayout += imgHeight + 14;
     }
@@ -5305,6 +6344,7 @@ function salvarCarga() {
 
   document.querySelectorAll("#tabela-carga tbody tr").forEach((linha) => {
     itens.push({
+      crachaId: linha.dataset.itemId || "",
       nome: linha.querySelector(".nome")?.value || "",
       qtd: linha.querySelector(".qtd")?.value || "",
       comp: linha.querySelector(".comp")?.value || "",
@@ -5339,6 +6379,16 @@ function carregarCargaSalva() {
     adicionarLinha(false);
 
     const linha = document.querySelector("#tabela-carga tbody tr:last-child");
+
+    if (item.crachaId) {
+      linha.dataset.itemId = item.crachaId;
+
+      const idNumerico = parseInt(item.crachaId, 10);
+
+      if (!isNaN(idNumerico) && idNumerico >= proximoIdItem) {
+        proximoIdItem = idNumerico + 1;
+      }
+    }
 
     linha.querySelector(".nome").value = item.nome || "";
     linha.querySelector(".qtd").value = item.qtd || "1";
