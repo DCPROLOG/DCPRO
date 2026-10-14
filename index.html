@@ -146,6 +146,19 @@ class="logo-dcpro"
       <span>Limpar Tudo</span>
     </button>
 
+    <button class="btn-importar-excel" onclick="document.getElementById('input-importar-excel').click()" type="button">
+      <i class="fa-solid fa-file-excel"></i>
+      <span>Importar Excel</span>
+    </button>
+
+    <input
+      type="file"
+      id="input-importar-excel"
+      accept=".xlsx,.xls,.xlsm"
+      style="display: none;"
+      onchange="importarCargaExcel(event)"
+    />
+
     <button class="btn-exportar-json" onclick="exportarCargaJSON()" type="button">
       <i class="fa-solid fa-file-export"></i>
       <span>Exportar</span>
@@ -275,9 +288,7 @@ class="logo-dcpro"
           Distribuição otimizada da carga no espaço útil do veículo.
         </div>
 
-        <div id="dimesoes-bau-texto" class="dimensoes-bau-tag">
-          Dimensões Internas Disponíveis: -
-        </div>
+       
 
         <div id="container-veiculos"></div>
         <div id="resumo-excedente" class="resumo-excedente"></div>

@@ -60,6 +60,10 @@ let estadoPersonalizadoSalvo = null;
 // refletir o modo Personalizado em vez de sempre o automático.
 let caixasPersonalizadasPorViagem = {};
 let avaliacoesPersonalizadoPorViagem = {};
+
+// Veículos (número) cujo cálculo AUTOMÁTICO ficou crítico. Usado pelos relatórios
+// para saber se o arranjo manual (aba Personalizado) assume o lugar do automático.
+let automaticoCriticoPorVeiculo = {};
 let sugestaoVeiculoMenor = null;;
 let alertaOperacionalAET = null;
 let ressalvaCgAtual = null;
@@ -753,15 +757,13 @@ itensAgrupados.forEach((grupo) => {
   caixa.comp <= espaco.comp + 0.01 &&
   caixa.larg <= espaco.larg + 0.01;
 
-const cabeGirado =
-  caixa.larg <= espaco.comp + 0.01 &&
-  caixa.comp <= espaco.larg + 0.01;
-
-if (cabeNormal || cabeGirado) {
-  const usarGirado = !cabeNormal && cabeGirado;
-
-  const compReal = usarGirado ? caixa.larg : caixa.comp;
-  const largReal = usarGirado ? caixa.comp : caixa.larg;
+// REGRA: o DCPRO nunca gira caixas no modo automático. Ele não tem como
+// saber se uma caixa pode ser girada, então usa sempre as medidas informadas
+// (comprimento x largura). O giro só existe no modo Personalizado, feito
+// pelo próprio usuário.
+if (cabeNormal) {
+  const compReal = caixa.comp;
+  const largReal = caixa.larg;
 
         const espacoDireita = {
           x: espaco.x + compReal,
@@ -1408,6 +1410,84 @@ if (somenteComprimento) {
   };
 }
 
+// =====================================================
+// PIOR CASO ENTRE OS VEÍCULOS DA FROTA
+//
+// Cada veículo tem a sua própria análise de centro de gravidade e de
+// encaixe físico, mas o selo de status e os relatórios (PDF / Excel)
+// mostram um único resultado. Aqui o veículo em PIOR situação decide,
+// para que o aviso de um veículo não se perca só porque outro veículo
+// foi desenhado depois dele.
+// =====================================================
+
+function pontuarGravidadeCgDoVeiculo(estado) {
+  const critico =
+    (estado.ressalva && estado.ressalva.nivel === "critico") ||
+    (estado.lateral && estado.lateral.nivel === "critico");
+
+  if (critico) return 4;
+  if (estado.ressalva) return 3;
+  if (estado.longitudinal) return 2;
+  if (estado.lateral) return 1;
+
+  return 0;
+}
+
+// Um aviso CRÍTICO nunca pode ficar escondido atrás de um aviso mais leve.
+// O selo mostra um aviso por vez (CG > longitudinal > lateral); se o crítico
+// for o lateral e houver um aviso de CG ou longitudinal mais leve, tira esses
+// dois da frente para o crítico aparecer e bloquear os relatórios.
+function priorizarCgCriticoNoSelo() {
+  const ressalvaCritica =
+    ressalvaCgAtual && ressalvaCgAtual.nivel === "critico";
+
+  const lateralCritico =
+    mensagemTransversalCgAtual &&
+    mensagemTransversalCgAtual.nivel === "critico";
+
+  if (lateralCritico && !ressalvaCritica) {
+    ressalvaCgAtual = null;
+    orientacaoLongitudinalCgAtual = null;
+  }
+}
+
+function aplicarPiorCasoDaFrota(estados) {
+  // Com um único veículo nada muda: os avisos já são os dele.
+  if (estados.length <= 1) {
+    return;
+  }
+
+  globalEstorouMetragem = estados.some((estado) => estado.estourou);
+
+  let pior = estados[0];
+  let piorPontos = pontuarGravidadeCgDoVeiculo(pior);
+
+  estados.forEach((estado) => {
+    const pontos = pontuarGravidadeCgDoVeiculo(estado);
+
+    if (pontos > piorPontos) {
+      pior = estado;
+      piorPontos = pontos;
+    }
+  });
+
+  if (piorPontos === 0) {
+    ressalvaCgAtual = null;
+    mensagemTransversalCgAtual = null;
+    orientacaoLongitudinalCgAtual = null;
+    return;
+  }
+
+  const prefixo = `Veículo ${pior.indice + 1} — ${pior.nomeVeiculo}: `;
+
+  const comPrefixo = (aviso) =>
+    aviso ? { ...aviso, mensagem: prefixo + aviso.mensagem } : null;
+
+  ressalvaCgAtual = comPrefixo(pior.ressalva);
+  mensagemTransversalCgAtual = comPrefixo(pior.lateral);
+  orientacaoLongitudinalCgAtual = comPrefixo(pior.longitudinal);
+}
+
 function calcularCarga() {
   ressalvaCgAtual = null;
   orientacaoLongitudinalCgAtual = null;
@@ -1633,6 +1713,7 @@ let cargas = [];
     alertaOperacionalAET = verificarAlertaAET(cargas);
 
     const idsExcedentesAcumulados = new Set();
+    const estadosPorVeiculo = [];
 
     cargas.forEach((carga, indice) => {
       const numero = indice + 1;
@@ -1762,10 +1843,29 @@ let cargas = [];
   `dimesoes-${numero}`,
 );
 
+      estadosPorVeiculo.push({
+        indice,
+        nomeVeiculo: carga.veiculo.nome,
+        ressalva: ressalvaCgAtual,
+        lateral: mensagemTransversalCgAtual,
+        longitudinal: orientacaoLongitudinalCgAtual,
+        estourou: globalEstorouMetragem,
+      });
+
       globalItensExcedentes.forEach((item) => {
         idsExcedentesAcumulados.add(item.id);
       });
     });
+
+    automaticoCriticoPorVeiculo = {};
+
+    estadosPorVeiculo.forEach((estado) => {
+      automaticoCriticoPorVeiculo[estado.indice + 1] =
+        pontuarGravidadeCgDoVeiculo(estado) === 4;
+    });
+
+    aplicarPiorCasoDaFrota(estadosPorVeiculo);
+    priorizarCgCriticoNoSelo();
 
     document.querySelectorAll("#tabela-carga tbody tr").forEach((linha, index) => {
       linha.classList.toggle(
@@ -1870,7 +1970,14 @@ const cargaEmLimiteOperacional =
     );
   });
 
-if (cargaAprovada && alertaOperacionalAET) {
+// Distribuição CRÍTICA (CG ou lateral) tem prioridade sobre os outros avisos
+// do selo, porque é a que bloqueia o PDF e o Excel.
+const cgCritico =
+  (ressalvaCgAtual && ressalvaCgAtual.nivel === "critico") ||
+  (mensagemTransversalCgAtual &&
+    mensagemTransversalCgAtual.nivel === "critico");
+
+if (cargaAprovada && alertaOperacionalAET && !cgCritico) {
   // A carga cabe, mas exige atenção regulatória.
   selo.style.display = "block";
   selo.className = "selo-compatibilidade selo-atencao";
@@ -1886,7 +1993,8 @@ Verifique a necessidade de AET</span>
 
 } else if (
   cargaAprovada &&
-  cargaEmLimiteOperacional
+  cargaEmLimiteOperacional &&
+  !cgCritico
 ) {
   /*
     A carga ainda está dentro da capacidade máxima,
@@ -3435,7 +3543,7 @@ function calcularAnaliseTransversalCg(centroGravidadeY, veiculo) {
       nivel: "atencao",
       titulo: "ATENÇÃO À DISTRIBUIÇÃO LATERAL DA CARGA",
       mensagem:
-        `A distribuição estimada da carga apresenta concentração lateral para o lado ${ladoDesvioLateral.toLowerCase()}. ` +
+        `A distribuição estimada da carga apresenta concentração lateral para o lado ${ladoDesvioLateral === "ESQUERDA" ? "esquerdo" : "direito"}. ` +
         "Recomenda-se revisar o posicionamento da carga antes da operação.",
     };
   } else if (nivelTransversalCg === "critico") {
@@ -3443,7 +3551,7 @@ function calcularAnaliseTransversalCg(centroGravidadeY, veiculo) {
       nivel: "critico",
       titulo: "DISTRIBUIÇÃO LATERAL CRÍTICA DA CARGA",
       mensagem:
-        `A distribuição estimada da carga apresenta concentração lateral significativa para o lado ${ladoDesvioLateral.toLowerCase()}. ` +
+        `A distribuição estimada da carga apresenta concentração lateral significativa para o lado ${ladoDesvioLateral === "ESQUERDA" ? "esquerdo" : "direito"}. ` +
         "Recomenda-se revisar a disposição da carga antes de prosseguir.",
     };
   }
@@ -3808,16 +3916,12 @@ function tentarArrumacaoCompacta(caixasOriginais, veiculo, centroZonaEixos) {
     for (let i = 0; i < espacosFallback.length; i++) {
       const espaco = espacosFallback[i];
 
+      // Sem giro automático: só a orientação informada pelo usuário.
       const orientacoesFallback = [
   {
     comp: caixa.comp,
     larg: caixa.larg,
     girado: false,
-  },
-  {
-    comp: caixa.larg,
-    larg: caixa.comp,
-    girado: true,
   },
 ];
 
@@ -4315,16 +4419,12 @@ function posicionarCaixasNoEspaco(caixasIndividuais, veiculo, centroZonaEixos, e
     let melhorPosicao = null;
 
     espaçosLivres.forEach((espaco) => {
+    // Sem giro automático: só a orientação informada pelo usuário.
     const orientacoes = [
     {
       comp: caixa.comp,
       larg: caixa.larg,
       girado: false,
-    },
-    {
-      comp: caixa.larg,
-      larg: caixa.comp,
-      girado: true,
     },
   ];
 
@@ -5091,6 +5191,115 @@ let tamanhoFinalW = Math.max(
   const resumoExcedente = document.getElementById("resumo-excedente");
 }
 
+// =====================================================
+// AVISOS DE ATENÇÃO DO SELO PARA OS RELATÓRIOS (PDF / EXCEL)
+//
+// O selo de compatibilidade pode mostrar mais de um tipo de atenção.
+// Os relatórios precisam reconhecer TODOS eles; do contrário bloqueiam
+// a exportação com "operação não compatível" sem haver incompatibilidade.
+// Retorna null quando o selo não mostra nenhum destes avisos.
+// =====================================================
+
+function obterAvisoComplementarDoSelo(textoSelo) {
+  if (textoSelo.includes("ATENÇÃO À DISTRIBUIÇÃO LATERAL DA CARGA")) {
+    return {
+      titulo: "ATENÇÃO À DISTRIBUIÇÃO LATERAL DA CARGA",
+      mensagem: mensagemTransversalCgAtual
+        ? mensagemTransversalCgAtual.mensagem
+        : "A distribuição estimada da carga apresenta concentração lateral. Recomenda-se revisar o posicionamento da carga antes da operação.",
+      statusExcel: "ATENÇÃO À DISTRIBUIÇÃO LATERAL DA CARGA",
+      dashboardExcel: "REVISAR LATERAL",
+      statusPdf: "STATUS: ATENÇÃO À DISTRIBUIÇÃO LATERAL DA CARGA",
+    };
+  }
+
+  if (textoSelo.includes("CONCENTRAÇÃO LONGITUDINAL")) {
+    const titulo = textoSelo.includes("CONCENTRAÇÃO LONGITUDINAL TRASEIRA")
+      ? "CONCENTRAÇÃO LONGITUDINAL TRASEIRA"
+      : "CONCENTRAÇÃO LONGITUDINAL DIANTEIRA";
+
+    return {
+      titulo,
+      mensagem: orientacaoLongitudinalCgAtual
+        ? orientacaoLongitudinalCgAtual.mensagem
+        : "A distribuição estimada apresenta concentração de peso em uma das extremidades do espaço útil. Recomenda-se verificar o posicionamento da carga antes da operação.",
+      statusExcel: titulo,
+      dashboardExcel: "REVISAR LONGITUDINAL",
+      statusPdf: "STATUS: " + titulo,
+    };
+  }
+
+  if (textoSelo.includes("LIMITE OPERACIONAL")) {
+    return {
+      titulo: "LIMITE OPERACIONAL DE PESO",
+      mensagem:
+        "A carga permanece dentro da capacidade máxima cadastrada do veículo, porém utiliza 95% ou mais da capacidade de peso. Avalie outro veículo ou o fracionamento da carga.",
+      statusExcel: "LIMITE OPERACIONAL DE PESO",
+      dashboardExcel: "LIMITE DE PESO",
+      statusPdf: "STATUS: LIMITE OPERACIONAL DE PESO (95% OU MAIS DA CAPACIDADE)",
+    };
+  }
+
+  return null;
+}
+
+// =====================================================
+// CRÍTICO NO CÁLCULO AUTOMÁTICO x ARRANJO MANUAL (PERSONALIZADO)
+//
+// Quando o cálculo automático de um veículo é CRÍTICO, o relatório só pode
+// ser liberado se a aba Personalizado desse veículo estiver ativa, porque aí
+// vale o arranjo manual (que tem a sua própria avaliação: se ele for crítico
+// ou incompleto, os relatórios continuam bloqueados).
+// =====================================================
+
+function resolverCriticoAutomatico(distribuicaoCritica) {
+  const resultado = {
+    pendente: false,
+    substituidoPeloManual: false,
+    veiculosSubstituidos: [],
+  };
+
+  if (!distribuicaoCritica) {
+    return resultado;
+  }
+
+  const criticos = Object.keys(automaticoCriticoPorVeiculo).filter(
+    (numero) => automaticoCriticoPorVeiculo[numero],
+  );
+
+  // Sem informação por veículo: por segurança, continua bloqueando.
+  if (criticos.length === 0) {
+    resultado.pendente = true;
+    return resultado;
+  }
+
+  criticos.forEach((numero) => {
+    const painel = document.getElementById(`painel-personalizado-${numero}`);
+    const ativo = painel && painel.classList.contains("painel-aba-ativa");
+    const avaliacao = avaliacoesPersonalizadoPorViagem[numero];
+
+    if (ativo && avaliacao) {
+      resultado.veiculosSubstituidos.push(numero);
+    } else {
+      resultado.pendente = true;
+    }
+  });
+
+  resultado.substituidoPeloManual = !resultado.pendente;
+
+  return resultado;
+}
+
+function montarAvisoCriticoSubstituido(veiculos) {
+  return {
+    titulo: "CÁLCULO AUTOMÁTICO CRÍTICO — ARRANJO MANUAL CONSIDERADO",
+    mensagem:
+      `O cálculo automático classificou a distribuição da carga como CRÍTICA (veículo ${veiculos.join(", ")}). ` +
+      "Este relatório considera o arranjo manual da aba Personalizado, que não foi classificado como crítico. " +
+      "A responsabilidade pela distribuição final é de quem realiza o carregamento.",
+  };
+}
+
 function exportarExcel() {
 
   const selo = document.getElementById("selo-compatibilidade");
@@ -5114,10 +5323,22 @@ const atencaoDistribuicao =
 const distribuicaoCritica =
   selo &&
   selo.style.display !== "none" &&
-  textoSelo.includes("DISTRIBUIÇÃO CRÍTICA DA CARGA");
+  (textoSelo.includes("DISTRIBUIÇÃO CRÍTICA DA CARGA") ||
+    textoSelo.includes("DISTRIBUIÇÃO LATERAL CRÍTICA DA CARGA"));
 
 const operacaoNaoCompativel =
   textoSelo.includes("OPERAÇÃO NÃO COMPATÍVEL");
+
+// Outros avisos de ATENÇÃO que o selo pode mostrar (distribuição lateral,
+// concentração longitudinal e limite operacional). Não são bloqueios.
+const avisoComplementar = obterAvisoComplementarDoSelo(
+  selo && selo.style.display !== "none" ? textoSelo : "",
+);
+
+let avisoC3 =
+  atencaoDistribuicao && ressalvaCgAtual
+    ? ressalvaCgAtual
+    : avisoComplementar;
 
 // Para cada veículo com a aba Personalizado ativa, usa a
 // avaliação ao vivo do arranjo manual em vez do automático —
@@ -5149,11 +5370,13 @@ Object.keys(avaliacoesPersonalizadoPorViagem).forEach((numeroVeiculo) => {
   );
 });
 
-if (distribuicaoCritica || personalizadoCritico) {
+const criticoAutomatico = resolverCriticoAutomatico(!!distribuicaoCritica);
+
+if (criticoAutomatico.pendente || personalizadoCritico) {
   alert(
     personalizadoCritico
       ? "O Excel não pode ser gerado: o arranjo manual (aba Personalizado) de um ou mais veículos foi classificado como CRÍTICO. Revise a distribuição antes de exportar."
-      : "O Excel não pode ser gerado porque a distribuição da carga foi classificada como CRÍTICA. Revise o posicionamento da carga antes de prosseguir.",
+      : "O Excel não pode ser gerado porque a distribuição da carga foi classificada como CRÍTICA. Revise o posicionamento da carga antes de prosseguir. Se preferir, monte um arranjo manual na aba Personalizado do veículo e deixe-o adequado antes de exportar.",
   );
 
   return;
@@ -5172,7 +5395,9 @@ if (
   (
     !cargaAprovada &&
     !atencaoRegulatoria &&
-    !atencaoDistribuicao
+    !atencaoDistribuicao &&
+    !avisoComplementar &&
+    !criticoAutomatico.substituidoPeloManual
   )
 ) {
   alert(
@@ -5199,6 +5424,26 @@ if (atencaoRegulatoria) {
 if (atencaoDistribuicao) {
   textoStatus = "ATENÇÃO À DISTRIBUIÇÃO DA CARGA";
   textoDashboard = "REVISAR DISTRIBUIÇÃO";
+
+  corStatus = "FEF3C7";
+  corTexto = "92400E";
+}
+
+if (criticoAutomatico.substituidoPeloManual) {
+  avisoC3 = montarAvisoCriticoSubstituido(criticoAutomatico.veiculosSubstituidos);
+
+  if (!personalizadoAtencao) {
+    textoStatus = "ARRANJO MANUAL APROVADO";
+    textoDashboard = "MANUAL APROVADO";
+
+    corStatus = "FEF3C7";
+    corTexto = "92400E";
+  }
+}
+
+if (avisoComplementar) {
+  textoStatus = avisoComplementar.statusExcel;
+  textoDashboard = avisoComplementar.dashboardExcel;
 
   corStatus = "FEF3C7";
   corTexto = "92400E";
@@ -5382,7 +5627,7 @@ if (personalizadoAtencao && textoStatus === "CARGA APROVADA") {
       "",
     ]);
 
-    if (atencaoDistribuicao && ressalvaCgAtual) {
+    if (avisoC3) {
   resumo.push(["", "", "", "", ""]);
 
   resumo.push([
@@ -5394,7 +5639,7 @@ if (personalizadoAtencao && textoStatus === "CARGA APROVADA") {
   ]);
 
   resumo.push([
-    ressalvaCgAtual.titulo,
+    avisoC3.titulo,
     "",
     "",
     "",
@@ -5402,7 +5647,7 @@ if (personalizadoAtencao && textoStatus === "CARGA APROVADA") {
   ]);
 
   resumo.push([
-    ressalvaCgAtual.mensagem,
+    avisoC3.mensagem,
     "",
     "",
     "",
@@ -5432,7 +5677,7 @@ if (personalizadoAtencao && textoStatus === "CARGA APROVADA") {
 }, // Frase 2
     ];
 
-    if (atencaoDistribuicao && ressalvaCgAtual) {
+    if (avisoC3) {
   wsResumo["!merges"].push(
     {
       s: { r: 15 + cargas.length, c: 0 },
@@ -5477,6 +5722,25 @@ if (personalizadoAtencao && textoStatus === "CARGA APROVADA") {
       { hpt: 28 }, // Linha 15 - Frase 1
       { hpt: 52 }, // Linha 16 - Frase 2
     ];
+
+    // Textos longos de status: aumenta a altura das linhas para o texto não ser cortado
+    wsResumo["!rows"][4] = { hpt: textoStatus.length > 24 ? 34 : 22 };
+
+    let linhasCartaoStatus = 1;
+    let colunasUsadas = 0;
+
+    textoDashboard.split(" ").forEach((palavra) => {
+      if (colunasUsadas === 0) {
+        colunasUsadas = palavra.length;
+      } else if (colunasUsadas + 1 + palavra.length <= 12) {
+        colunasUsadas += 1 + palavra.length;
+      } else {
+        linhasCartaoStatus++;
+        colunasUsadas = palavra.length;
+      }
+    });
+
+    wsResumo["!rows"][6] = { hpt: Math.max(32, linhasCartaoStatus * 21 + 6) };
 
     wsResumo["A1"].s = estiloCelula(azul, branco, true, 18, true);
     wsResumo["A2"].s = estiloCelula(azul, branco, true, 13, true);
@@ -5567,7 +5831,7 @@ wsResumo["!rows"][10 + cargas.length] = {
 };
 
 // Linha vazia entre OBSERVAÇÕES e o bloco C3
-if (atencaoDistribuicao && ressalvaCgAtual) {
+if (avisoC3) {
   wsResumo["!rows"][14 + cargas.length] = {
     hpt: 10,
   };
@@ -5586,7 +5850,7 @@ wsResumo["!rows"][linhaObsTexto2 - 1] = {
   hpt: 52,
 };
 
-    if (atencaoDistribuicao && ressalvaCgAtual) {
+    if (avisoC3) {
 const linhaC3Titulo = 16 + cargas.length;
 const linhaC3Status = 17 + cargas.length;
 const linhaC3Mensagem = 18 + cargas.length;
@@ -5923,10 +6187,19 @@ const distribuicaoAtencao =
 const distribuicaoCritica =
   selo &&
   selo.style.display !== "none" &&
-  textoSelo.includes("DISTRIBUIÇÃO CRÍTICA DA CARGA");
+  (textoSelo.includes("DISTRIBUIÇÃO CRÍTICA DA CARGA") ||
+    textoSelo.includes("DISTRIBUIÇÃO LATERAL CRÍTICA DA CARGA"));
 
 const operacaoNaoCompativel =
   textoSelo.includes("OPERAÇÃO NÃO COMPATÍVEL");
+
+// Outros avisos de ATENÇÃO que o selo pode mostrar (distribuição lateral,
+// concentração longitudinal e limite operacional). Não são bloqueios.
+const avisoComplementar = obterAvisoComplementarDoSelo(
+  selo && selo.style.display !== "none" ? textoSelo : "",
+);
+
+let avisoC3 = ressalvaCgAtual || avisoComplementar;
 
 // Mesma lógica do Excel: para cada veículo com a aba
 // Personalizado ativa, usa a avaliação ao vivo em vez do
@@ -5951,11 +6224,13 @@ Object.keys(avaliacoesPersonalizadoPorViagem).forEach((numeroVeiculo) => {
   else if (avaliacao.nivel === "atencao") personalizadoAtencao = true;
 });
 
-if (distribuicaoCritica || personalizadoCritico) {
+const criticoAutomatico = resolverCriticoAutomatico(!!distribuicaoCritica);
+
+if (criticoAutomatico.pendente || personalizadoCritico) {
   alert(
     personalizadoCritico
       ? "O PDF não pode ser gerado: o arranjo manual (aba Personalizado) de um ou mais veículos foi classificado como CRÍTICO. Revise a distribuição antes de exportar."
-      : "O PDF não pode ser gerado porque a distribuição da carga foi classificada como CRÍTICA. Revise o posicionamento da carga antes de prosseguir.",
+      : "O PDF não pode ser gerado porque a distribuição da carga foi classificada como CRÍTICA. Revise o posicionamento da carga antes de prosseguir. Se preferir, monte um arranjo manual na aba Personalizado do veículo e deixe-o adequado antes de exportar.",
   );
 
   return;
@@ -5973,7 +6248,9 @@ if (
   operacaoNaoCompativel ||
   (!cargaAprovada &&
     !atencaoRegulatoria &&
-    !distribuicaoAtencao)
+    !distribuicaoAtencao &&
+    !avisoComplementar &&
+    !criticoAutomatico.substituidoPeloManual)
 ) {
   alert(
     "O PDF não pode ser gerado porque a operação não está compatível.",
@@ -5995,6 +6272,22 @@ if (atencaoRegulatoria) {
 if (distribuicaoAtencao) {
   statusRelatorio =
     "STATUS: ATENÇÃO À DISTRIBUIÇÃO DA CARGA";
+
+  corStatusRelatorio = [180, 83, 9];
+}
+
+if (criticoAutomatico.substituidoPeloManual) {
+  avisoC3 = montarAvisoCriticoSubstituido(criticoAutomatico.veiculosSubstituidos);
+
+  if (!personalizadoAtencao) {
+    statusRelatorio = "STATUS: ARRANJO MANUAL APROVADO";
+
+    corStatusRelatorio = [180, 83, 9];
+  }
+}
+
+if (avisoComplementar) {
+  statusRelatorio = avisoComplementar.statusPdf;
 
   corStatusRelatorio = [180, 83, 9];
 }
@@ -6226,11 +6519,11 @@ doc.text(statusRelatorio, 105, 102, { align: "center" });
     y + 22,
   );
 
-  if (ressalvaCgAtual) {
+  if (avisoC3) {
   doc.setFont(undefined, "bold");
 
   doc.text(
-    `- C3 / Distribuição da carga: ${ressalvaCgAtual.titulo}`,
+    `- C3 / Distribuição da carga: ${avisoC3.titulo}`,
     20,
     y + 31,
   );
@@ -6238,7 +6531,7 @@ doc.text(statusRelatorio, 105, 102, { align: "center" });
   doc.setFont(undefined, "normal");
 
   const textoRessalvaCg = doc.splitTextToSize(
-    ressalvaCgAtual.mensagem,
+    avisoC3.mensagem,
     165,
   );
 
@@ -6252,7 +6545,7 @@ doc.text(statusRelatorio, 105, 102, { align: "center" });
   // =========================
   // ASSINATURAS
   // =========================
-  y += ressalvaCgAtual ? 65 : 45;
+  y += avisoC3 ? 65 : 45;
 
   if (y > 260) {
     doc.addPage();
@@ -6537,6 +6830,598 @@ function importarCargaJSON(evento) {
   };
 
   leitor.readAsText(arquivo);
+}
+
+// =====================================================
+// IMPORTAR EXCEL (.xlsx / .xls)
+//
+// Lê somente: Caixa/Base/Palet, Quantidade, Comprimento,
+// Largura, Altura e Peso. Encontra o cabeçalho sozinho,
+// em qualquer linha ou coluna da planilha.
+// =====================================================
+
+function normalizarCabecalhoPlanilha(valor) {
+  return String(valor ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\(.*?\)/g, " ")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function classificarCabecalhoPlanilha(valor) {
+  const bruto = String(valor ?? "").trim();
+
+  if (!bruto || bruto.length > 40) {
+    return null;
+  }
+
+  const t = normalizarCabecalhoPlanilha(bruto);
+
+  if (!t) {
+    return null;
+  }
+
+  const comeca = (...p) => p.some((x) => t.startsWith(x));
+  const tem = (...p) => p.some((x) => t.includes(x));
+  const igual = (...p) => p.includes(t);
+
+  if (comeca("quant", "qtd", "qde", "numerode", "nde", "nro")) {
+    return { campo: "qtd", prioridade: tem("total") ? 0 : 1 };
+  }
+
+  if (comeca("peso", "weight") || igual("kg")) {
+    let prioridade = 2;
+
+    if (tem("unit")) prioridade = 4;
+    else if (tem("bruto")) prioridade = 3;
+    else if (tem("liq")) prioridade = 1;
+
+    if (tem("tot")) prioridade = 0;
+
+    return { campo: "peso", prioridade, total: prioridade === 0 };
+  }
+
+  if (comeca("comprimento", "compr", "length") || igual("comp", "c", "cmp")) {
+    return { campo: "comp", prioridade: 1 };
+  }
+
+  if (comeca("largura", "width") || igual("larg", "l", "lg")) {
+    return { campo: "larg", prioridade: 1 };
+  }
+
+  if (comeca("altura", "height") || igual("alt", "a", "h")) {
+    return { campo: "alt", prioridade: 1 };
+  }
+
+  // Coluna única com as três medidas (ex.: 120x80x100 = C x L x A)
+  if (comeca("dimens", "medida") || igual("cxlxa", "cxlxh")) {
+    return { campo: "dim3", prioridade: 1 };
+  }
+
+  if (tem("caixa", "base", "palet", "pallet")) {
+    return { campo: "nome", prioridade: 3 };
+  }
+
+  if (
+    tem(
+      "descri",
+      "identific",
+      "produto",
+      "material",
+      "mercadoria",
+      "nome",
+      "tipo",
+      "embalagem",
+    )
+  ) {
+    return { campo: "nome", prioridade: 2 };
+  }
+
+  if (igual("item", "ref", "referencia", "codigo", "cod", "sku")) {
+    return { campo: "nome", prioridade: 1 };
+  }
+
+  return null;
+}
+
+function escolherMelhorColunaPlanilha(candidatos) {
+  return [...candidatos].sort(
+    (a, b) => b.prioridade - a.prioridade || a.indice - b.indice,
+  )[0];
+}
+
+function encontrarCabecalhoPlanilha(matriz) {
+  let melhor = null;
+  const limite = Math.min(matriz.length, 200);
+
+  for (let r = 0; r < limite; r++) {
+    const linha = matriz[r] || [];
+    const acima = r > 0 ? matriz[r - 1] || [] : [];
+    const candidatos = {};
+
+    linha.forEach((celula, c) => {
+      let classe = classificarCabecalhoPlanilha(celula);
+
+      // Cabeçalho em duas linhas (célula mesclada): olha a linha de cima,
+      // mas nunca para o campo de identificação.
+      if (!classe) {
+        const classeAcima = classificarCabecalhoPlanilha(acima[c]);
+
+        if (classeAcima && classeAcima.campo !== "nome") {
+          classe = classeAcima;
+        }
+      }
+
+      if (!classe) return;
+
+      if (!candidatos[classe.campo]) candidatos[classe.campo] = [];
+      candidatos[classe.campo].push({ ...classe, indice: c });
+    });
+
+    const colunas = {};
+
+    Object.keys(candidatos).forEach((campo) => {
+      colunas[campo] = escolherMelhorColunaPlanilha(candidatos[campo]);
+    });
+
+    const dimensoesSeparadas = colunas.comp && colunas.larg && colunas.alt;
+
+    if (!dimensoesSeparadas && !colunas.dim3) {
+      continue;
+    }
+
+    // Com colunas separadas de comprimento/largura/altura, a coluna única é ignorada.
+    if (dimensoesSeparadas) {
+      delete colunas.dim3;
+    }
+
+    // Em empate, prefere a interpretação com colunas separadas.
+    const pontuacao = Object.keys(colunas).length - (dimensoesSeparadas ? 0 : 0.5);
+
+    if (!melhor || pontuacao > melhor.pontuacao) {
+      melhor = { linha: r, colunas, pontuacao };
+    }
+  }
+
+  // Sem coluna de identificação na linha do cabeçalho:
+  // tenta a linha logo acima (cabeçalho em duas linhas).
+  if (melhor && !melhor.colunas.nome && melhor.linha > 0) {
+    const acima = matriz[melhor.linha - 1] || [];
+    const candidatos = [];
+
+    acima.forEach((celula, c) => {
+      const classe = classificarCabecalhoPlanilha(celula);
+
+      if (classe && classe.campo === "nome") {
+        candidatos.push({ ...classe, indice: c });
+      }
+    });
+
+    if (candidatos.length > 0) {
+      melhor.colunas.nome = escolherMelhorColunaPlanilha(candidatos);
+    }
+  }
+
+  return melhor;
+}
+
+function detectarFatorComprimentoPlanilha(texto) {
+  const t = String(texto ?? "").toLowerCase();
+
+  if (/\(\s*mm\s*\)|\bmm\b|milimetro/.test(t)) return 0.1;
+  if (/\(\s*m\s*\)|\bmetros?\b|\bmts?\b/.test(t)) return 100;
+  if (/\(\s*cm\s*\)|\bcm\b|centimetro/.test(t)) return 1;
+
+  return null;
+}
+
+function detectarFatorPesoPlanilha(texto) {
+  const t = String(texto ?? "").toLowerCase();
+
+  if (/\(\s*g\s*\)|\bgramas?\b/.test(t)) return 0.001;
+  if (/\(\s*t\s*\)|\btoneladas?\b|\bton\b/.test(t)) return 1000;
+
+  return null;
+}
+
+function lerNumeroPlanilha(valor) {
+  if (typeof valor === "number") {
+    return Number.isFinite(valor) ? valor : NaN;
+  }
+
+  if (valor === null || valor === undefined) {
+    return NaN;
+  }
+
+  const achado = String(valor).match(/\d[\d.,]*/);
+
+  if (!achado) {
+    return NaN;
+  }
+
+  let s = achado[0];
+  const temPonto = s.includes(".");
+  const temVirgula = s.includes(",");
+
+  if (temPonto && temVirgula) {
+    // O último separador é o decimal.
+    if (s.lastIndexOf(",") > s.lastIndexOf(".")) {
+      s = s.replace(/\./g, "").replace(",", ".");
+    } else {
+      s = s.replace(/,/g, "");
+    }
+  } else if (temVirgula) {
+    s = s.split(",").length > 2 ? s.replace(/,/g, "") : s.replace(",", ".");
+  } else if (temPonto && /^\d{1,3}(\.\d{3})+$/.test(s)) {
+    // "1.350" = mil trezentos e cinquenta (mesmo padrão dos campos do DCPRO)
+    s = s.replace(/\./g, "");
+  }
+
+  const numero = parseFloat(s);
+
+  return Number.isFinite(numero) ? numero : NaN;
+}
+
+function lerDimensoesPlanilha(valor) {
+  const achado = String(valor ?? "").match(
+    /(\d[\d.,]*)\s*[x×*]\s*(\d[\d.,]*)\s*[x×*]\s*(\d[\d.,]*)/i,
+  );
+
+  if (!achado) {
+    return { comp: NaN, larg: NaN, alt: NaN };
+  }
+
+  return {
+    comp: lerNumeroPlanilha(achado[1]),
+    larg: lerNumeroPlanilha(achado[2]),
+    alt: lerNumeroPlanilha(achado[3]),
+  };
+}
+
+function analisarMatrizPlanilha(matriz) {
+  const cabecalho = encontrarCabecalhoPlanilha(matriz);
+
+  if (!cabecalho) {
+    return null;
+  }
+
+  const { linha: linhaCab, colunas } = cabecalho;
+  const linhaTitulos = matriz[linhaCab] || [];
+  const linhaAcima = linhaCab > 0 ? matriz[linhaCab - 1] || [] : [];
+
+  const textoDoCabecalho = (campo) => {
+    const coluna = colunas[campo];
+
+    if (!coluna) return "";
+
+    return `${linhaTitulos[coluna.indice] ?? ""} ${linhaAcima[coluna.indice] ?? ""}`;
+  };
+
+  const dimensaoUnica = !(colunas.comp && colunas.larg && colunas.alt);
+  const colunaUnidade = (campo) => (dimensaoUnica ? "dim3" : campo);
+
+  const fatores = {
+    comp: detectarFatorComprimentoPlanilha(textoDoCabecalho(colunaUnidade("comp"))),
+    larg: detectarFatorComprimentoPlanilha(textoDoCabecalho(colunaUnidade("larg"))),
+    alt: detectarFatorComprimentoPlanilha(textoDoCabecalho(colunaUnidade("alt"))),
+  };
+
+  // Unidade escrita em só uma das colunas vale para as três.
+  const fatorInformado = [fatores.comp, fatores.larg, fatores.alt].find(
+    (f) => f !== null,
+  );
+
+  ["comp", "larg", "alt"].forEach((campo) => {
+    if (fatores[campo] === null && fatorInformado !== undefined) {
+      fatores[campo] = fatorInformado;
+    }
+  });
+
+  const fatorPeso = detectarFatorPesoPlanilha(textoDoCabecalho("peso")) ?? 1;
+
+  const avisos = [];
+
+  if (!colunas.peso) avisos.push("não encontrei a coluna de Peso");
+  if (!colunas.qtd) avisos.push("não encontrei a coluna de Quantidade (usei 1)");
+  if (!colunas.nome) avisos.push("não encontrei a coluna Caixa/Base/Palet");
+
+  if (colunas.peso && colunas.peso.total) {
+    avisos.push("o peso veio de uma coluna de peso total e foi dividido pela quantidade");
+  }
+
+  const ler = (linha, campo) =>
+    colunas[campo] ? linha[colunas[campo].indice] : undefined;
+
+  const itens = [];
+  const ignoradas = [];
+  let maiorMedida = 0;
+
+  for (let r = linhaCab + 1; r < matriz.length; r++) {
+    const linha = matriz[r] || [];
+
+    if (linha.every((c) => String(c ?? "").trim() === "")) {
+      continue;
+    }
+
+    const medidas = dimensaoUnica
+      ? lerDimensoesPlanilha(ler(linha, "dim3"))
+      : {
+          comp: lerNumeroPlanilha(ler(linha, "comp")),
+          larg: lerNumeroPlanilha(ler(linha, "larg")),
+          alt: lerNumeroPlanilha(ler(linha, "alt")),
+        };
+
+    const { comp, larg, alt } = medidas;
+
+    if (!(comp > 0 || larg > 0 || alt > 0)) {
+      const ehTotal = linha.some((c) =>
+        normalizarCabecalhoPlanilha(c).includes("total"),
+      );
+
+      if (!ehTotal) ignoradas.push(r);
+
+      continue;
+    }
+
+    let qtd = 1;
+
+    if (colunas.qtd) {
+      const q = lerNumeroPlanilha(ler(linha, "qtd"));
+
+      if (q === 0) {
+        ignoradas.push(r);
+        continue;
+      }
+
+      if (q > 0) qtd = Math.max(1, Math.round(q));
+    }
+
+    let peso = lerNumeroPlanilha(ler(linha, "peso")) * fatorPeso;
+
+    if (colunas.peso && colunas.peso.total && peso > 0) {
+      peso = peso / qtd;
+    }
+
+    const nome = colunas.nome ? String(ler(linha, "nome") ?? "").trim() : "";
+
+    [comp, larg, alt].forEach((n) => {
+      if (n > maiorMedida) maiorMedida = n;
+    });
+
+    itens.push({ indiceLinha: r, nome, qtd, comp, larg, alt, peso });
+  }
+
+  const unidadeInformada = fatores.comp !== null;
+
+  return {
+    linhaCabecalho: linhaCab,
+    colunas,
+    fatores,
+    itens,
+    ignoradas,
+    avisos,
+    // Sem unidade no cabeçalho e todos os valores pequenos: provavelmente metros.
+    possivelMetros: !unidadeInformada && itens.length > 0 && maiorMedida <= 12,
+  };
+}
+
+function numeroParaCampoPlanilha(n) {
+  if (!(n > 0)) {
+    return "";
+  }
+
+  // Vírgula como decimal e sem separador de milhar:
+  // é o formato que os campos do DCPRO interpretam corretamente.
+  return String(Math.round(n * 1000) / 1000).replace(".", ",");
+}
+
+function tabelaTemDadosPreenchidos() {
+  return Array.from(document.querySelectorAll("#tabela-carga tbody tr")).some(
+    (tr) =>
+      ["nome", "comp", "larg", "alt", "peso"].some((classe) =>
+        tr.querySelector("." + classe)?.value.trim(),
+      ),
+  );
+}
+
+function importarCargaExcel(evento) {
+  const arquivo = evento.target.files[0];
+  evento.target.value = "";
+
+  if (!arquivo) {
+    return;
+  }
+
+  if (typeof XLSX === "undefined") {
+    alert(
+      "A biblioteca de leitura de Excel não foi carregada. Verifique a conexão com a internet e recarregue a página.",
+    );
+    return;
+  }
+
+  const leitor = new FileReader();
+
+  leitor.onerror = function () {
+    alert("Não foi possível ler esse arquivo.");
+  };
+
+  leitor.onload = function (leituraEvento) {
+    let planilha;
+
+    try {
+      planilha = XLSX.read(new Uint8Array(leituraEvento.target.result), {
+        type: "array",
+      });
+    } catch (erro) {
+      alert(
+        "Não foi possível abrir esse arquivo. Confira se é uma planilha Excel (.xlsx ou .xls) válida.",
+      );
+      return;
+    }
+
+    const analises = [];
+
+    planilha.SheetNames.forEach((nomeAba) => {
+      const aba = planilha.Sheets[nomeAba];
+
+      if (!aba || !aba["!ref"]) return;
+
+      // Limita a área lida (planilhas com formatação na coluna inteira
+      // podem declarar milhões de linhas vazias).
+      const intervalo = XLSX.utils.decode_range(aba["!ref"]);
+      intervalo.e.r = Math.min(intervalo.e.r, intervalo.s.r + 4999);
+      intervalo.e.c = Math.min(intervalo.e.c, intervalo.s.c + 59);
+
+      const matriz = XLSX.utils.sheet_to_json(aba, {
+        header: 1,
+        raw: true,
+        defval: "",
+        blankrows: true,
+        range: XLSX.utils.encode_range(intervalo),
+      });
+
+      const analise = analisarMatrizPlanilha(matriz);
+
+      if (analise && analise.itens.length > 0) {
+        analise.nomeAba = nomeAba;
+        analise.linhaInicial = intervalo.s.r;
+        analises.push(analise);
+      }
+    });
+
+    if (analises.length === 0) {
+      alert(
+        "Não encontrei os dados de carga nessa planilha.\n\n" +
+          "Em alguma linha da aba precisam existir os títulos Comprimento, Largura e Altura " +
+          "(ou uma coluna Dimensões no formato 120x80x100 = C x L x A) " +
+          "e, de preferência, Caixa/Base/Palet, Quantidade e Peso.\n\n" +
+          "Os nomes podem variar (ex.: Comp., Larg., Alt., Qtd., Peso Unit.) " +
+          "e a tabela pode estar em qualquer posição da aba.",
+      );
+      return;
+    }
+
+    let escolhidas = analises;
+
+    if (analises.length > 1) {
+      const lista = analises
+        .map((a, i) => `${i + 1} - ${a.nomeAba} (${a.itens.length} itens)`)
+        .join("\n");
+
+      const resposta = prompt(
+        `Foram encontradas ${analises.length} abas com dados de carga:\n\n${lista}\n\n` +
+          "Digite o número da aba que deseja importar (ou T para importar todas):",
+        "1",
+      );
+
+      if (resposta === null) return;
+
+      if (resposta.trim().toLowerCase() !== "t") {
+        const numero = parseInt(resposta, 10);
+
+        if (!(numero >= 1 && numero <= analises.length)) {
+          alert("Opção inválida. Importação cancelada.");
+          return;
+        }
+
+        escolhidas = [analises[numero - 1]];
+      }
+    }
+
+    let tratarComoMetros = false;
+
+    if (escolhidas.some((a) => a.possivelMetros)) {
+      tratarComoMetros = confirm(
+        "As medidas da planilha não informam a unidade e todos os valores são pequenos (parecem estar em METROS).\n\n" +
+          "OK = tratar como METROS (converte para cm)\n" +
+          "Cancelar = tratar como CENTÍMETROS",
+      );
+    }
+
+    const itensFinais = [];
+    const avisos = [];
+
+    escolhidas.forEach((analise) => {
+      const prefixo = escolhidas.length > 1 ? `[${analise.nomeAba}] ` : "";
+      const padrao = analise.possivelMetros && tratarComoMetros ? 100 : 1;
+      const fator = (campo) => analise.fatores[campo] ?? padrao;
+      const fatoresMedidas = [fator("comp"), fator("larg"), fator("alt")];
+
+      analise.avisos.forEach((aviso) => avisos.push(prefixo + aviso));
+
+      if (fatoresMedidas.some((f) => f !== 1)) {
+        const rotulo =
+          fatoresMedidas.every((f) => f === 100)
+            ? "metros"
+            : fatoresMedidas.every((f) => f === 0.1)
+              ? "milímetros"
+              : "outra unidade";
+
+        avisos.push(`${prefixo}medidas convertidas de ${rotulo} para cm`);
+      }
+
+      if (analise.ignoradas.length > 0) {
+        const linhasExcel = analise.ignoradas
+          .map((r) => analise.linhaInicial + r + 1)
+          .slice(0, 10)
+          .join(", ");
+
+        avisos.push(
+          `${prefixo}${analise.ignoradas.length} linha(s) sem medidas ou com quantidade zero foram ignoradas (linha(s) ${linhasExcel}${analise.ignoradas.length > 10 ? "..." : ""})`,
+        );
+      }
+
+      analise.itens.forEach((item) => {
+        itensFinais.push({
+          nome: item.nome,
+          qtd: String(item.qtd),
+          comp: numeroParaCampoPlanilha(item.comp * fator("comp")),
+          larg: numeroParaCampoPlanilha(item.larg * fator("larg")),
+          alt: numeroParaCampoPlanilha(item.alt * fator("alt")),
+          peso: numeroParaCampoPlanilha(item.peso),
+        });
+      });
+    });
+
+    if (tabelaTemDadosPreenchidos()) {
+      const substituir = confirm(
+        `Importar ${itensFinais.length} item(ns) da planilha?\n\n` +
+          "A tabela atual já tem dados e eles serão SUBSTITUÍDOS.",
+      );
+
+      if (!substituir) return;
+    }
+
+    const tbody = document.querySelector("#tabela-carga tbody");
+    tbody.innerHTML = "";
+
+    itensFinais.forEach((item) => {
+      adicionarLinha(false);
+
+      const linha = tbody.querySelector("tr:last-child");
+
+      linha.querySelector(".nome").value = item.nome;
+      linha.querySelector(".qtd").value = item.qtd;
+      linha.querySelector(".comp").value = item.comp;
+      linha.querySelector(".larg").value = item.larg;
+      linha.querySelector(".alt").value = item.alt;
+      linha.querySelector(".peso").value = item.peso;
+    });
+
+    atualizarLabelsEcores();
+    salvarCarga();
+    verificarItensIncompletos();
+
+    if (avisos.length > 0) {
+      alert(
+        `Importação concluída: ${itensFinais.length} item(ns).\n\nAtenção:\n- ` +
+          avisos.join("\n- "),
+      );
+    }
+  };
+
+  leitor.readAsArrayBuffer(arquivo);
 }
 
 function toggleHistorico() {
