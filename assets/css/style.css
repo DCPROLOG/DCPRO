@@ -1347,3 +1347,27 @@ padding: 0 12px;
   transform: translateY(-2px);
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.22);
 }
+
+/* Botão Plano de carregamento: linha própria, abaixo de PDF e Excel */
+.acoes-relatorio .btn-plano {
+  display: none;
+  grid-column: 1 / -1;
+  width: 100%;
+  background: linear-gradient(135deg, #0e7490, #0b3a5c);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 12px 10px;
+  font-weight: 800;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
+  transition: all 0.22s ease;
+}
+
+.acoes-relatorio .btn-plano:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.22);
+}
