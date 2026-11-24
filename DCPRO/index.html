@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+
+        <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dimensionador de Carga Pro</title>
+
+    <link rel="icon" type="image/png" href="assets/img/favicon.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"
+    />
+    <link rel="stylesheet" href="assets/css/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="hero-header">
+        <div class="hero-brand">
+          <img
+src="assets/img/logo.png"
+alt="DCPRO"
+class="logo-dcpro"
+/>
+        </div>
+      </div>
+
+      <div class="secao-veiculo">
+        <label>🚚 Selecione o Veículo:</label>
+        <select id="select-veiculo">
+          <option value="0">
+            Fiorino (Cap: 650 kg | C: 1.70m x L: 1.05m x A: 1.34m)
+          </option>
+          <option value="1">
+            Urbanos / Vans (Cap: 1.450 kg | C: 2.60m x L: 1.35m x A: 1.70m)
+          </option>
+          <option value="2">
+            VUC / 3/4 (Cap: 3.500 kg | C: 4.50m x L: 2.20m x A: 2.20m)
+          </option>
+          <option value="3">
+            Caminhão Toco (Cap: 6.000 kg | C: 6.50m x L: 2.40m x A: 2.50m)
+          </option>
+          <option value="4" selected>
+            Caminhão Truck (Cap: 14.000 kg | C: 8.50m x L: 2.40m x A Máx. Carga:
+            2.60m)
+          </option>
+          <option value="5">
+            Carreta 3 Eixos (Cap: 25.000 kg | C: 13.50m x L: 2.45m x A Máx.
+            Rodagem ANTT: 3.00m)
+          </option>
+          <option value="personalizado">Veículo Personalizado</option>
+        </select>
+
+        <div
+  id="bloco-veiculo-personalizado"
+  class="bloco-veiculo-personalizado"
+>
+  <div class="veiculo-personalizado-card">
+    <strong class="veiculo-personalizado-titulo">
+      🚚 Dados do Veículo Personalizado
+    </strong>
+
+    <p class="veiculo-personalizado-ajuda">
+      💡 Informe as dimensões internas úteis do compartimento de carga e
+      a capacidade máxima de peso do veículo. O layout visual da carga
+      será gerado automaticamente com essas medidas.
+    </p>
+
+    <div class="veiculo-personalizado-grid">
+      <div class="campo-vp">
+        <label for="vp-nome">Nome do Veículo</label>
+        <input
+          id="vp-nome"
+          type="text"
+          placeholder="Ex.: Prancha Rebaixada"
+        />
+      </div>
+
+      <div class="campo-vp">
+        <label for="vp-peso">Peso Máximo (kg)</label>
+        <input
+  id="vp-peso"
+  type="number"
+/>
+      </div>
+
+      <div class="campo-vp">
+        <label for="vp-qtd">Qtd. Conjuntos</label>
+        <input
+          id="vp-qtd"
+          type="number"
+          min="1"
+          value="1"
+        />
+      </div>
+
+      <div class="campo-vp">
+        <label for="vp-comp">Comprimento (cm)</label>
+        <input
+  id="vp-comp"
+  type="number"
+        />
+      </div>
+
+      <div class="campo-vp">
+        <label for="vp-larg">Largura (cm)</label>
+        <input
+  id="vp-larg"
+  type="number"
+        />
+      </div>
+
+      <div class="campo-vp">
+        <label for="vp-alt">Altura (cm)</label>
+        <input
+          id="vp-alt"
+          type="number"
+        />
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="acoes-principais">
+  <div class="acoes-tabela">
+    <button class="btn-add" onclick="adicionarLinha()">
+      <i class="fa-solid fa-plus"></i>
+      <span>Adicionar Item</span>
+    </button>
+
+    <button class="btn-clear" onclick="limparTudo()">
+      <i class="fa-solid fa-trash"></i>
+      <span>Limpar Tudo</span>
+    </button>
+
+    <button class="btn-importar-excel" onclick="document.getElementById('input-importar-excel').click()" type="button">
+      <i class="fa-solid fa-file-excel"></i>
+      <span>Importar Excel</span>
+    </button>
+
+    <input
+      type="file"
+      id="input-importar-excel"
+      accept=".xlsx,.xls,.xlsm"
+      style="display: none;"
+      onchange="importarCargaExcel(event)"
+    />
+
+    <button class="btn-exportar-json" onclick="exportarCargaJSON()" type="button">
+      <i class="fa-solid fa-file-export"></i>
+      <span>Exportar</span>
+    </button>
+
+    <button class="btn-importar-json" onclick="document.getElementById('input-importar-json').click()" type="button">
+      <i class="fa-solid fa-file-import"></i>
+      <span>Importar</span>
+    </button>
+
+    <input
+      type="file"
+      id="input-importar-json"
+      accept=".json"
+      style="display: none;"
+      onchange="importarCargaJSON(event)"
+    />
+  </div>
+
+  <button class="btn-historico" onclick="toggleHistorico()" type="button">
+    <i class="fa-solid fa-clock-rotate-left"></i>
+    <span>Histórico</span>
+  </button>
+
+  <a
+  href="src/veiculos-especiais-busca-inteligente.html"
+  class="btn-consultar-guia"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+    <i class="fa-solid fa-book-open"></i>
+    <span>Consultar Guia</span>
+  </a>
+</div>
+
+<div id="painel-historico" class="painel-historico">
+  <div class="painel-historico-cabecalho">
+    <strong>Últimos cálculos</strong>
+    <button class="btn-fechar-historico" onclick="toggleHistorico()" type="button">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+  <div id="lista-historico"></div>
+</div>
+
+      <div class="table-responsive">
+        <div id="avisoItensIncompletos" class="aviso-itens-incompletos">
+          ⚠️ Existem itens com informações incompletas. Preencha Comprimento,
+          Largura, Altura e Peso  de calcular.
+        </div>
+        <table id="tabela-carga">
+          <thead>
+            <tr>
+              <th><i class="fa-solid fa-palette"></i> Ref / Cor</th>
+              <th><i class="fa-solid fa-box"></i> Identificação / Tipo</th>
+              <th><i class="fa-solid fa-hashtag"></i> Qtd</th>
+              <th>
+                <i class="fa-solid fa-ruler-horizontal"></i> Comprimento (cm)
+              </th>
+              <th>
+                <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
+                Largura (cm)
+              </th>
+              <th><i class="fa-solid fa-arrow-up"></i> Altura (cm)</th>
+              <th>
+                <i class="fa-solid fa-weight-hanging"></i> Peso Unit. (kg)
+              </th>
+              <th><i class="fa-solid fa-gear"></i> Ação</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <br />
+      <div class="acoes-relatorio">
+        <button class="btn-calc" onclick="calcularCarga()">
+          <i class="fa-solid fa-calculator"></i>
+          <span>Calcular</span>
+        </button>
+
+        <button
+          class="btn-pdf"
+          id="btn-gerar-pdf"
+          onclick="gerarRelatorioPDF()"
+        >
+          <i class="fa-solid fa-file-pdf"></i>
+          <span>PDF</span>
+        </button>
+
+        <button class="btn-excel" id="btn-excel" onclick="exportarExcel()">
+          <i class="fa-solid fa-file-excel"></i>
+          <span>Excel</span>
+        </button>
+
+        <button
+          class="btn-plano"
+          id="btn-plano-carregamento"
+          onclick="gerarPlanoCarregamento()"
+        >
+          <i class="fa-solid fa-truck-ramp-box"></i>
+          <span>Plano de carregamento (PDF)</span>
+        </button>
+      </div>
+
+      <div class="alerta-veiculo" id="alerta-frota"></div>
+      <div class="sugestao-veiculo" id="sugestao-frota"></div>
+      <div class="alerta-operacional" id="alerta-aet"></div>
+      <div id="selo-compatibilidade" class="selo-compatibilidade"></div>
+
+      <div class="resultados oculto" id="bloco-resultados">
+        <h2>Análise de Ocupação do Veículo Selecionado</h2>
+        <div class="metric-container">
+          <label
+            ><strong>Capacidade de Peso Ocupado:</strong>
+            <span id="txt-peso">0</span> kg de
+            <span id="max-peso">0</span> kg</label
+          >
+          <div class="bar-bg">
+            <div id="bar-peso" class="bar-fill fill-peso">0%</div>
+          </div>
+        </div>
+        <div class="metric-container metric-container-espacado">
+          <label
+            ><strong>Capacidade Cúbica Ocupada (Volume):</strong>
+            <span id="txt-vol">0</span> m³ de
+            <span id="max-vol">0</span> m³</label
+          >
+          <div class="bar-bg"><div id="bar-vol" class="bar-fill">0%</div></div>
+        </div>
+      </div>
+
+      <div class="mapa-box oculto" id="bloco-mapa">
+        <h2>📦 Planejamento da Carga</h2>
+        <div class="mapa-titulo">
+          Distribuição otimizada da carga no espaço útil do veículo.
+        </div>
+
+       
+
+        <div id="container-veiculos"></div>
+        <div id="resumo-excedente" class="resumo-excedente"></div>
+
+        <div class="nota-formal">
+          ℹ️ <strong>NOTA INFORMATIVA DE SEGURANÇA OPERACIONAL:</strong> O mapa
+          de disposição física acima constitui uma
+          <strong>projeção matemática sugestiva</strong>, desenvolvida para fins
+          de checagem volumétrica e análise de compatibilidade espacial da carga
+          em relação ao veículo selecionado. Esta interface não substitui a
+          avaliação técnica e presencial do encarregado de pátio, do motorista
+          ou do operador de estiva. A acomodação final deve observar
+          rigorosamente as amarrações regulamentares, a integridade física das
+          embalagens e as legislações vigentes de distribuição de peso por eixo
+          físico nas rodovias.
+        </div>
+      </div>
+    </div>
+
+    <script src="assets/js/script.js"></script>
+
+    <div class="rodape">DCPRO V1.6 Beta</div>
+  </body>
+</html>

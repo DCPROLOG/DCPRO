@@ -1,0 +1,8668 @@
+// =====================================================
+// DCPRO - Dimensionador de Carga Pro
+// // Versão: 1.6 BETA
+// Arquivo: script.js
+// =====================================================
+
+// =====================================================
+// CONFIGURAÇÕES GLOBAIS
+// =====================================================
+let ultimaFrotaCalculada = [];
+
+const coresItens = [
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#8b5cf6",
+  "#ec4899",
+  "#06b6d4",
+  "#f97316",
+  "#14b8a6",
+  "#ef4444",
+  "#a855f7",
+  "#6366f1",
+  "#84cc16",
+  "#059669",
+  "#d946ef",
+  "#b45309",
+  "#0284c7",
+  "#4d7c0f",
+  "#be123c",
+  "#6d28d9",
+  "#1e40af",
+];
+let globalEstorouMetragem = false;
+let globalItensExcedentes = [];
+
+// =====================================================
+// CRACHÁ PERMANENTE DE ITEM
+//
+// Cada item recebe um número que nunca muda, mesmo que a
+// lista seja reordenada (item adicionado/removido no meio).
+// Isso permite, no futuro, associar dados extras a um item
+// específico (como uma posição personalizada no mapa) sem
+// depender da posição dele na tabela.
+// =====================================================
+
+let proximoIdItem = 1;
+let trocaAutomaticaVeiculo = false;
+let avisoTrocaVeiculo = null;
+
+// Assinatura da carga atual (itens + veículo selecionado) e o
+// último arranjo manual salvo na aba Personalizado. Enquanto a
+// assinatura não mudar, o arranjo manual é restaurado a cada
+// recálculo em vez de ser substituído pelo automático.
+let assinaturaCargaAtual = "";
+let estadoPersonalizadoSalvo = null;
+
+// Guardam, por número de viagem/veículo, o arranjo manual atual
+// e sua avaliação ao vivo — para o PDF e o Excel conseguirem
+// refletir o modo Personalizado em vez de sempre o automático.
+let caixasPersonalizadasPorViagem = {};
+let avaliacoesPersonalizadoPorViagem = {};
+
+// Veículos (número) cujo cálculo AUTOMÁTICO ficou crítico. Usado pelos relatórios
+// para saber se o arranjo manual (aba Personalizado) assume o lugar do automático.
+let automaticoCriticoPorVeiculo = {};
+
+// Estado do centro de gravidade de cada veículo (usado pelo plano de carregamento).
+let estadosCgPorVeiculo = [];
+let sugestaoVeiculoMenor = null;;
+let alertaOperacionalAET = null;
+let ressalvaCgAtual = null;
+let mensagemTransversalCgAtual = null;
+let orientacaoLongitudinalCgAtual = null;
+
+// =====================================================
+// BANCO DE VEÍCULOS
+// =====================================================
+
+const dbVeiculos = [
+  {
+    nome: "Fiorino",
+    pesoMax: 650,
+    volMax: 1.70 * 1.05 * 1.34,
+    compFisico: 1.70,
+    largFisica: 1.05,
+    altFisica: 1.34,
+  },
+
+  {
+    nome: "Urbanos / Vans",
+    pesoMax: 1450,
+    volMax: 2.60 * 1.35 * 1.70,
+    compFisico: 2.60,
+    largFisica: 1.35,
+    altFisica: 1.70,
+  },
+
+  {
+    nome: "VUC / 3/4",
+    pesoMax: 3500,
+    volMax: 4.50 * 2.20 * 2.20,
+    compFisico: 4.50,
+    largFisica: 2.20,
+    altFisica: 2.20,
+  },
+
+  {
+    nome: "Caminhão Toco",
+    pesoMax: 6000,
+    volMax: 6.50 * 2.40 * 2.50,
+    compFisico: 6.50,
+    largFisica: 2.40,
+    altFisica: 2.50,
+  },
+
+  {
+    nome: "Caminhão Truck",
+    pesoMax: 14000,
+    volMax: 8.50 * 2.40 * 2.60,
+    compFisico: 8.50,
+    largFisica: 2.40,
+    altFisica: 2.60,
+  },
+
+  {
+    nome: "Carreta 3 Eixos",
+    pesoMax: 25000,
+    volMax: 13.50 * 2.45 * 3.00,
+    compFisico: 13.50,
+    largFisica: 2.45,
+    altFisica: 3.00,
+  },
+];
+
+// =====================================================
+// UTILIDADES
+// =====================================================
+
+// Texto digitado ou importado (nomes de itens, nome do veículo personalizado)
+// nunca pode virar HTML: tudo que vai para innerHTML passa por aqui.
+function escaparHtml(valor) {
+  return String(valor ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatarBR(valor) {
+  return valor.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+// =====================================================
+// INTERFACE (UI)
+// =====================================================
+
+const tbodyCarga = document.querySelector("#tabela-carga tbody");
+
+if (tbodyCarga) {
+  tbodyCarga.addEventListener(
+    "keydown",
+    function (evento) {
+      const noCampoDePeso = evento.target.classList.contains("peso");
+
+      if (evento.key === "Enter" && noCampoDePeso) {
+        evento.preventDefault();
+
+        adicionarLinha();
+
+        const novaLinha = document.querySelector(
+          "#tabela-carga tbody tr:last-child",
+        );
+
+        const primeiroCampo = novaLinha
+          ? novaLinha.querySelector(".nome")
+          : null;
+
+        if (primeiroCampo) {
+          primeiroCampo.focus();
+        }
+      }
+    },
+  );
+}
+
+function atualizarLabelsEcores() {
+  const lines = document.querySelectorAll("#tabela-carga tbody tr");
+  lines.forEach((linha, index) => {
+    const inlineLabel = linha.querySelector(".label-linha");
+    const cor = coresItens[index % coresItens.length];
+    if (inlineLabel) {
+      inlineLabel.innerText = `Item ${index + 1}`;
+      inlineLabel.style.backgroundColor = cor;
+    }
+  });
+}
+
+function validarNumeros(input) {
+  input.value = input.value.replace(/[^0-9.,]/g, "");
+  let partes = input.value.split(/[.,]/);
+  if (partes.length > 2) {
+    input.value = partes[0] + "." + partes.slice(1).join("");
+  }
+}
+
+// =====================================================
+// TABELA DE CARGA
+// =====================================================
+
+function adicionarLinha(salvar = true, atualizarRotulos = true) {
+  const tabela = document
+    .getElementById("tabela-carga")
+    .getElementsByTagName("tbody")[0];
+  const novaLinha = tabela.insertRow();
+  novaLinha.dataset.itemId = proximoIdItem++;
+
+  novaLinha.innerHTML = `
+        <td data-label="Ref / Cor"><span class="label-linha">Item</span></td>
+        <td data-label="Identificação / Tipo"><input type="text" placeholder="Ex: Caixa A" class="nome"></td>
+        <td data-label="Qtd"><input type="number" class="qtd" value="1" min="1" oninput="validarNumeros(this)"></td>
+        <td data-label="Comprimento (cm)"><input type="text" class="comp" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td data-label="Largura (cm)"><input type="text" class="larg" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td data-label="Altura (cm)"><input type="text" class="alt" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td data-label="Peso Unit. (kg)"><input type="text" class="peso" placeholder="KG" oninput="validarNumeros(this)"></td>
+        <td data-label="Ação">
+          <button class="btn-duplicar" onclick="duplicarLinha(this)" title="Duplicar item">
+            <i class="fa-solid fa-copy"></i>
+          </button>
+          <button class="btn-danger" onclick="deletarLinha(this)" title="Excluir item">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </td>
+    `;
+
+  novaLinha.querySelectorAll("input").forEach((input) => {
+    input.addEventListener("input", salvarCarga);
+  });
+
+  // Em importações com muitas linhas, quem chama atualiza os rótulos
+  // uma única vez no final (atualizar a cada linha deixava tudo lento).
+  if (atualizarRotulos) {
+    atualizarLabelsEcores();
+  }
+
+  if (salvar) {
+    salvarCarga();
+  }
+}
+function deletarLinha(botao) {
+  botao.parentNode.parentNode.remove();
+
+  atualizarLabelsEcores();
+  calcularCarga();
+  salvarCarga();
+}
+
+function duplicarLinha(botao) {
+  const linhaAtual = botao.closest("tr");
+  const tabela = document
+    .getElementById("tabela-carga")
+    .getElementsByTagName("tbody")[0];
+
+  const indiceAtual = Array.from(tabela.rows).indexOf(linhaAtual);
+  const novaLinha = tabela.insertRow(indiceAtual + 1);
+  novaLinha.dataset.itemId = proximoIdItem++;
+
+  novaLinha.innerHTML = `
+        <td data-label="Ref / Cor"><span class="label-linha">Item</span></td>
+        <td data-label="Identificação / Tipo"><input type="text" placeholder="Ex: Caixa A" class="nome"></td>
+        <td data-label="Qtd"><input type="number" class="qtd" value="1" min="1" oninput="validarNumeros(this)"></td>
+        <td data-label="Comprimento (cm)"><input type="text" class="comp" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td data-label="Largura (cm)"><input type="text" class="larg" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td data-label="Altura (cm)"><input type="text" class="alt" placeholder="CM" oninput="validarNumeros(this)"></td>
+        <td data-label="Peso Unit. (kg)"><input type="text" class="peso" placeholder="KG" oninput="validarNumeros(this)"></td>
+        <td data-label="Ação">
+          <button class="btn-duplicar" onclick="duplicarLinha(this)" title="Duplicar item">
+            <i class="fa-solid fa-copy"></i>
+          </button>
+          <button class="btn-danger" onclick="deletarLinha(this)" title="Excluir item">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </td>
+    `;
+
+  novaLinha.querySelector(".nome").value =
+    linhaAtual.querySelector(".nome").value;
+  novaLinha.querySelector(".qtd").value =
+    linhaAtual.querySelector(".qtd").value;
+  novaLinha.querySelector(".comp").value =
+    linhaAtual.querySelector(".comp").value;
+  novaLinha.querySelector(".larg").value =
+    linhaAtual.querySelector(".larg").value;
+  novaLinha.querySelector(".alt").value =
+    linhaAtual.querySelector(".alt").value;
+  novaLinha.querySelector(".peso").value =
+    linhaAtual.querySelector(".peso").value;
+
+  novaLinha.querySelectorAll("input").forEach((input) => {
+    input.addEventListener("input", salvarCarga);
+  });
+
+  atualizarLabelsEcores();
+  salvarCarga();
+}
+
+// =====================================================
+// VALIDAÇÕES
+// =====================================================
+
+function verificarItensIncompletos() {
+  let incompleto = false;
+
+  document.querySelectorAll("#tabela-carga tbody tr").forEach(function (tr) {
+    const qtdEl = tr.querySelector(".qtd");
+    const compEl = tr.querySelector(".comp");
+    const largEl = tr.querySelector(".larg");
+    const altEl = tr.querySelector(".alt");
+    const pesoEl = tr.querySelector(".peso");
+
+    if (!qtdEl || !compEl || !largEl || !altEl || !pesoEl) return;
+
+    const qtdVal = parseInt(qtdEl.value) || 0;
+    const compVal =
+      parseFloat(compEl.value.replace(/\./g, "").replace(",", ".")) || 0;
+    const largVal =
+      parseFloat(largEl.value.replace(/\./g, "").replace(",", ".")) || 0;
+    const altVal =
+      parseFloat(altEl.value.replace(/\./g, "").replace(",", ".")) || 0;
+    const pesoVal =
+      Number(pesoEl.value.replace(/\./g, "").replace(",", ".")) || 0;
+
+    const camposDaLinha = [
+      { el: qtdEl, valido: qtdVal > 0 },
+      { el: compEl, valido: compVal > 0 },
+      { el: largEl, valido: largVal > 0 },
+      { el: altEl, valido: altVal > 0 },
+      { el: pesoEl, valido: pesoVal > 0 },
+    ];
+
+    camposDaLinha.forEach(({ el, valido }) => {
+      el.classList.toggle("campo-invalido", !valido);
+    });
+
+    if (camposDaLinha.some(({ valido }) => !valido)) {
+      incompleto = true;
+    }
+  });
+
+  const aviso = document.getElementById("avisoItensIncompletos");
+
+  if (aviso) {
+    aviso.style.display = incompleto ? "block" : "none";
+  }
+
+  return incompleto;
+}
+
+// =====================================================
+// CÁLCULOS
+// =====================================================
+
+function escolherVeiculoIdeal(
+  peso,
+  volume,
+  maiorComp,
+  maiorLarg,
+  maiorAlt,
+  itens = null,
+) {
+  // O agrupamento das unidades não depende do veículo: faz uma vez só.
+  const itensAgrupados = itens ? agruparItensParaEmpilhamento(itens) : null;
+
+  for (const veiculo of dbVeiculos) {
+    const volumeMaximo =
+      veiculo.compFisico * veiculo.largFisica * veiculo.altFisica;
+
+    let areaOk = true;
+    let comprimentoOk = true;
+
+const excessoAceitoOperacionalmente =
+  maiorComp <= veiculo.compFisico &&
+  (
+    maiorLarg > veiculo.largFisica ||
+    maiorAlt > veiculo.altFisica
+  );
+
+    if (itens) {
+      const areaPiso = calcularAreaPisoEstimada(itens, veiculo, itensAgrupados);
+
+      const areaMaxima = veiculo.compFisico * veiculo.largFisica;
+
+      areaOk =
+  areaPiso <= areaMaxima * 0.95 ||
+  excessoAceitoOperacionalmente;
+
+      /*
+  A validação real do comprimento será feita pela
+  arrumação física, que considera itens lado a lado,
+  rotação e espaços disponíveis no veículo.
+*/
+comprimentoOk = true;
+    }
+
+    if (
+      peso <= veiculo.pesoMax &&
+      volume <= volumeMaximo &&
+      areaOk &&
+      comprimentoOk &&
+      maiorComp <= veiculo.compFisico &&
+      (maiorLarg <= veiculo.largFisica || excessoAceitoOperacionalmente) &&
+(maiorAlt <= veiculo.altFisica || excessoAceitoOperacionalmente)
+    ) {
+      return veiculo;
+    }
+  }
+
+  return dbVeiculos[dbVeiculos.length - 1];
+}
+
+// =====================================================
+// SUGESTÃO DE VEÍCULO MENOR DISPONÍVEL
+//
+// Quando a carga cabe inteiramente no veículo escolhido
+// pelo usuário, verifica se algum veículo padrão MENOR
+// (peso, volume e arrumação física) também atenderia.
+// Não troca a seleção sozinho — apenas sinaliza a
+// possibilidade, para o usuário decidir.
+// =====================================================
+
+function verificarVeiculoMenorDisponivel(
+  veiculoAtual,
+  cargaAgrupada,
+  pesoTotal,
+  volumeTotal,
+) {
+  const indiceAtual = dbVeiculos.findIndex(
+    (veiculo) => veiculo.nome === veiculoAtual.nome,
+  );
+
+  // Veículo personalizado não faz parte do banco padrão.
+  if (indiceAtual <= 0) {
+    return null;
+  }
+
+  for (let i = 0; i < indiceAtual; i++) {
+    const candidato = dbVeiculos[i];
+
+    if (
+      pesoTotal <= candidato.pesoMax &&
+      volumeTotal <= candidato.volMax &&
+      testarArrumacaoFisica(candidato, cargaAgrupada)
+    ) {
+      return candidato;
+    }
+  }
+
+  return null;
+}
+
+// =====================================================
+// AGRUPAR UNIDADES IGUAIS PARA TESTE DE EMPILHAMENTO
+// =====================================================
+
+// A chave de agrupamento de um item só depende do nome, das dimensões de base e
+// do id. Como o mesmo item é reagrupado milhares de vezes durante o planejamento
+// da frota, a chave é guardada (e revalidada) em vez de recalculada a cada vez.
+const cacheChaveEmpilhamento = new WeakMap();
+
+function obterChaveEmpilhamento(item) {
+  const guardado = cacheChaveEmpilhamento.get(item);
+
+  if (
+    guardado &&
+    guardado.nome === item.nome &&
+    guardado.comp === item.comp &&
+    guardado.larg === item.larg &&
+    guardado.id === item.id
+  ) {
+    return guardado;
+  }
+
+  const nomeMinusculo = String(item.nome || "").toLowerCase();
+
+  const ehPalletOuBase =
+    nomeMinusculo.includes("pallet") ||
+    nomeMinusculo.includes("palete") ||
+    nomeMinusculo.includes("base");
+
+  // Base e palete continuam individuais.
+  // Para os demais volumes, a compatibilidade física
+  // para empilhamento é determinada pelas dimensões.
+  const chave = ehPalletOuBase
+    ? `individual|${item.id}`
+    : [Number(item.comp).toFixed(4), Number(item.larg).toFixed(4)].join("|");
+
+  const novo = {
+    nome: item.nome,
+    comp: item.comp,
+    larg: item.larg,
+    id: item.id,
+    ehPalletOuBase,
+    chave,
+  };
+
+  cacheChaveEmpilhamento.set(item, novo);
+
+  return novo;
+}
+
+function agruparItensParaEmpilhamento(itens) {
+  const grupos = {};
+
+  itens.forEach((item) => {
+    const { ehPalletOuBase, chave } = obterChaveEmpilhamento(item);
+
+    if (!grupos[chave]) {
+      grupos[chave] = {
+        comp: item.comp,
+        larg: item.larg,
+        alt: item.alt,
+
+        ehPalletOuBase,
+
+        unidades: [],
+        qtd: 0,
+      };
+    }
+
+    const quantidade = Number(item.qtd) || 1;
+
+    for (let i = 0; i < quantidade; i++) {
+grupos[chave].unidades.push({
+  id: item.id,
+  crachaId: item.crachaId,
+  nome: item.nome,
+  alt: Number(item.alt) || 0,
+  peso: Number(item.peso) || 0,
+  cor: item.cor,
+});
+    }
+
+    grupos[chave].qtd += quantidade;
+  });
+
+  // Dentro de uma futura pilha:
+  // unidade mais pesada primeiro = parte inferior.
+  Object.values(grupos).forEach((grupo) => {
+    grupo.unidades.sort(
+      (a, b) => b.peso - a.peso
+    );
+  });
+
+  return Object.values(grupos);
+}
+
+function criarViagem(veiculo) {
+  return {
+    veiculo: veiculo,
+
+    itens: [],
+
+    pesoAtual: 0,
+
+    volumeAtual: 0,
+
+    areaAtual: 0,
+
+    comprimentoUsado: 0,
+
+    maiorComprimento: 0,
+
+    maiorLargura: 0,
+
+    maiorAltura: 0,
+  };
+}
+
+// =====================================================
+// MONTAGEM DAS PILHAS DE EMPILHAMENTO
+//
+// Mesma regra de sempre (primeira pilha que aceita a unidade):
+// - máximo de 3 unidades por pilha, ou 2 se houver unidade acima de 0,80 m;
+// - a soma das alturas não passa da altura útil do veículo.
+//
+// Só mudou a forma de procurar: pilhas que NUNCA mais poderão receber
+// nenhuma unidade (cheias, ou sem altura livre nem para a menor unidade)
+// saem da lista de busca. O resultado é exatamente o mesmo, mas em cargas
+// com centenas de unidades iguais o custo deixa de crescer ao quadrado.
+// =====================================================
+
+function montarPilhasDeEmpilhamento(unidadesOrdenadas, alturaUtil) {
+  const limiteAltura = alturaUtil + 0.001;
+  const pilhas = [];
+  let abertas = [];
+
+  // As unidades chegam ordenadas da mais alta para a mais baixa:
+  // a última é a menor altura que ainda vai aparecer.
+  const menorAltura = unidadesOrdenadas.length
+    ? unidadesOrdenadas[unidadesOrdenadas.length - 1].alt
+    : 0;
+
+  const pilhaFechada = (pilha) =>
+    pilha.unidades.length >= 3 ||
+    (pilha.unidades.length >= 2 && pilha.temItemAlto) ||
+    pilha.alturaTotal + menorAltura > limiteAltura;
+
+  unidadesOrdenadas.forEach((unidade) => {
+    let pilhaEncontrada = null;
+
+    for (let i = 0; i < abertas.length; i++) {
+      const pilha = abertas[i];
+
+      const possuiItemAlto = unidade.alt > 0.8 || pilha.temItemAlto;
+      const limiteQuantidade = possuiItemAlto ? 2 : 3;
+
+      if (
+        pilha.unidades.length < limiteQuantidade &&
+        pilha.alturaTotal + unidade.alt <= limiteAltura
+      ) {
+        pilhaEncontrada = pilha;
+        break;
+      }
+    }
+
+    if (pilhaEncontrada) {
+      pilhaEncontrada.unidades.push(unidade);
+      pilhaEncontrada.alturaTotal += unidade.alt;
+
+      if (unidade.alt > 0.8) {
+        pilhaEncontrada.temItemAlto = true;
+      }
+    } else {
+      const nova = {
+        alturaTotal: unidade.alt,
+        unidades: [unidade],
+        temItemAlto: unidade.alt > 0.8,
+      };
+
+      pilhas.push(nova);
+      abertas.push(nova);
+    }
+
+    abertas = abertas.filter((pilha) => !pilhaFechada(pilha));
+  });
+
+  return pilhas;
+}
+
+function calcularAreaPisoEstimada(itens, veiculo, itensAgrupadosPre = null) {
+    if (!veiculo) {
+    return 0;
+  }
+
+  let area = 0;
+
+const itensAgrupados =
+  itensAgrupadosPre || agruparItensParaEmpilhamento(itens);
+
+itensAgrupados.forEach((grupo) => {
+
+  // Base e palete continuam ocupando
+  // uma posição individual no piso.
+  if (grupo.ehPalletOuBase) {
+    area +=
+      grupo.comp *
+      grupo.larg *
+      grupo.qtd;
+
+    return;
+  }
+
+  // =====================================================
+  // EMPILHAMENTO COM ALTURAS VARIÁVEIS
+  //
+  // Caixas com a mesma base física podem compartilhar
+  // uma pilha mesmo possuindo alturas diferentes.
+  //
+  // Regras:
+  // - máximo de 3 unidades quando todas têm até 0,80 m;
+  // - se houver unidade acima de 0,80 m na pilha,
+  //   máximo de 2 unidades;
+  // - soma das alturas nunca pode ultrapassar
+  //   a altura útil do veículo.
+  // =====================================================
+
+  const unidades =
+    [...grupo.unidades].sort(
+      (a, b) => b.alt - a.alt
+    );
+
+  const pilhas = montarPilhasDeEmpilhamento(unidades, veiculo.altFisica);
+
+  const blocosNoPiso =
+    pilhas.length;
+
+  area +=
+    grupo.comp *
+    grupo.larg *
+    blocosNoPiso;
+});
+
+  return area;
+}
+
+function testarArrumacaoFisica(veiculo, itens) {
+  let caixasIndividuais = [];
+
+const itensAgrupados =
+  agruparItensParaEmpilhamento(itens);
+
+itensAgrupados.forEach((grupo) => {
+
+  // Base e palete continuam individuais.
+  if (grupo.ehPalletOuBase) {
+
+    for (let i = 0; i < grupo.qtd; i++) {
+      caixasIndividuais.push({
+        comp: grupo.comp,
+        larg: grupo.larg,
+        area: grupo.comp * grupo.larg,
+      });
+    }
+
+    return;
+  }
+
+  // =====================================================
+  // EMPILHAMENTO FÍSICO COM ALTURAS VARIÁVEIS
+  // =====================================================
+
+  const unidades =
+    [...grupo.unidades].sort(
+      (a, b) => b.alt - a.alt
+    );
+
+  const pilhas = montarPilhasDeEmpilhamento(unidades, veiculo.altFisica);
+
+  pilhas.forEach(() => {
+
+    caixasIndividuais.push({
+      comp: grupo.comp,
+      larg: grupo.larg,
+      area: grupo.comp * grupo.larg,
+    });
+
+  });
+});
+
+  caixasIndividuais.sort((a, b) => b.comp - a.comp || b.area - a.area);
+
+  let espacosLivres = [
+    {
+      x: 0,
+      y: 0,
+      comp: veiculo.compFisico,
+      larg: veiculo.largFisica,
+    },
+  ];
+
+  for (const caixa of caixasIndividuais) {
+    let encaixou = false;
+
+    for (let i = 0; i < espacosLivres.length; i++) {
+      const espaco = espacosLivres[i];
+
+      const cabeNormal =
+  caixa.comp <= espaco.comp + 0.01 &&
+  caixa.larg <= espaco.larg + 0.01;
+
+// REGRA: o DCPRO nunca gira caixas no modo automático. Ele não tem como
+// saber se uma caixa pode ser girada, então usa sempre as medidas informadas
+// (comprimento x largura). O giro só existe no modo Personalizado, feito
+// pelo próprio usuário.
+if (cabeNormal) {
+  const compReal = caixa.comp;
+  const largReal = caixa.larg;
+
+        const espacoDireita = {
+          x: espaco.x + compReal,
+          y: espaco.y,
+          comp: espaco.comp - compReal,
+          larg: espaco.larg,
+        };
+
+        const espacoCima = {
+          x: espaco.x,
+          y: espaco.y + largReal,
+          comp: compReal,
+          larg: espaco.larg - largReal,
+        };
+
+        espacosLivres.splice(i, 1);
+
+        if (espacoDireita.comp > 0.01 && espacoDireita.larg > 0.01) {
+          espacosLivres.push(espacoDireita);
+        }
+
+        if (espacoCima.comp > 0.01 && espacoCima.larg > 0.01) {
+          espacosLivres.push(espacoCima);
+        }
+
+        espacosLivres.sort((a, b) => a.x - b.x || a.y - b.y);
+
+        encaixou = true;
+        break;
+      }
+    }
+
+    if (!encaixou) return false;
+  }
+
+  return true;
+}
+
+function obterMaioresDimensoes(itens) {
+  let maiorComp = 0;
+  let maiorLarg = 0;
+  let maiorAlt = 0;
+
+  itens.forEach((item) => {
+    maiorComp = Math.max(maiorComp, item.comp);
+    maiorLarg = Math.max(maiorLarg, item.larg);
+    maiorAlt = Math.max(maiorAlt, item.alt);
+  });
+
+  return {
+    maiorComp,
+    maiorLarg,
+    maiorAlt,
+  };
+}
+
+
+
+function encontrarVeiculoComArrumacao(indiceInicial, itens) {
+  let indiceVeiculo = indiceInicial;
+
+  if (indiceVeiculo < 0) {
+    indiceVeiculo = 0;
+  }
+
+  while (indiceVeiculo < dbVeiculos.length) {
+
+    const veiculoAtual = dbVeiculos[indiceVeiculo];
+    
+    // Cabe normalmente
+    if (testarArrumacaoFisica(veiculoAtual, itens)) {
+      return veiculoAtual;
+    }
+
+    // Verifica se o único problema é excesso lateral (AET) —
+    // só se aplica quando é 1 item sozinho, e o motivo real
+    // de não caber é a largura (não comprimento, altura ou quantidade).
+    const somenteLargura =
+      itens.length === 1 &&
+      itens[0].comp <= veiculoAtual.compFisico &&
+      itens[0].alt <= veiculoAtual.altFisica &&
+      itens[0].larg > veiculoAtual.largFisica;
+
+    if (somenteLargura) {
+  return veiculoAtual;
+}
+
+    indiceVeiculo++;
+  }
+
+  return null;
+}
+
+function dividirItensQueExcedemMaiorVeiculo(listaCarga) {
+  const maiorVeiculo = dbVeiculos[dbVeiculos.length - 1];
+  const novaLista = [];
+
+  listaCarga.forEach((item) => {
+    const pesoTotalItem = item.peso * item.qtd;
+    const volumeTotalItem = item.comp * item.larg * item.alt * item.qtd;
+
+    if (
+      pesoTotalItem <= maiorVeiculo.pesoMax &&
+      volumeTotalItem <= maiorVeiculo.volMax &&
+      testarArrumacaoFisica(maiorVeiculo, [item])
+    ) {
+      novaLista.push(item);
+      return;
+    }
+
+    let qtdRestante = item.qtd;
+
+    while (qtdRestante > 0) {
+      let qtdQueCabe = 0;
+
+      for (let q = qtdRestante; q >= 1; q--) {
+        const itemTeste = {
+          ...item,
+          qtd: q,
+        };
+
+        const pesoTeste = itemTeste.peso * itemTeste.qtd;
+        const volumeTeste =
+          itemTeste.comp * itemTeste.larg * itemTeste.alt * itemTeste.qtd;
+
+        if (
+          pesoTeste <= maiorVeiculo.pesoMax &&
+          volumeTeste <= maiorVeiculo.volMax &&
+          testarArrumacaoFisica(maiorVeiculo, [itemTeste])
+        ) {
+          qtdQueCabe = q;
+          break;
+        }
+      }
+
+      if (qtdQueCabe === 0) {
+        novaLista.push({
+          ...item,
+          qtd: qtdRestante,
+        });
+        break;
+      }
+
+      novaLista.push({
+        ...item,
+        qtd: qtdQueCabe,
+      });
+
+      qtdRestante -= qtdQueCabe;
+    }
+  });
+
+  return novaLista;
+}
+
+function planejarFrotaFracionada(listaCarga, veiculoSelecionado = null) {
+  const frota = [];
+
+  listaCarga = dividirItensQueExcedemMaiorVeiculo(listaCarga);
+
+
+ // Separa a quantidade em unidades individuais para distribuir entre veículos
+listaCarga = listaCarga.flatMap((item) => {
+  const quantidade = Math.max(parseInt(item.qtd) || 1, 1);
+
+  return Array.from({ length: quantidade }, (_, indice) => ({
+    ...item,
+    qtd: 1,
+    unidade: indice + 1,
+    qtdOriginal: quantidade,
+  }));
+});
+
+  const veiculoPersonalizado =
+    veiculoSelecionado && veiculoSelecionado.personalizado
+      ? veiculoSelecionado
+      : null;
+
+  listaCarga.forEach((item) => {
+    const pesoItem = item.peso * item.qtd;
+    const volumeItem = item.comp * item.larg * item.alt * item.qtd;
+
+    /*
+      Primeiro verifica se existe um veículo padrão adequado
+      exclusivamente para este item.
+    */
+    const veiculoInicialItem = escolherVeiculoIdeal(
+      pesoItem,
+      volumeItem,
+      item.comp,
+      item.larg,
+      item.alt,
+      [item],
+    );
+
+    let veiculoPadraoItem = encontrarVeiculoComArrumacao(
+      dbVeiculos.findIndex(
+        (veiculo) => veiculo.nome === veiculoInicialItem.nome,
+      ),
+      [item],
+    );
+
+    /*
+      Impede considerar um veículo padrão que não respeite
+      peso, volume ou arrumação física.
+    */
+    if (
+  !veiculoPadraoItem ||
+  pesoItem > veiculoPadraoItem.pesoMax ||
+  volumeItem > veiculoPadraoItem.volMax ||
+  item.comp > veiculoPadraoItem.compFisico ||
+  item.larg > veiculoPadraoItem.largFisica ||
+  item.alt > veiculoPadraoItem.altFisica ||
+  !testarArrumacaoFisica(veiculoPadraoItem, [item])
+) {
+  veiculoPadraoItem = null;
+}
+
+const veiculoPadraoAdequado = dbVeiculos.find((veiculo) => {
+  const cabeNormal =
+    item.comp <= veiculo.compFisico &&
+    item.larg <= veiculo.largFisica;
+
+  return (
+    pesoItem <= veiculo.pesoMax &&
+    volumeItem <= veiculo.volMax &&
+    item.alt <= veiculo.altFisica &&
+    cabeNormal &&
+    testarArrumacaoFisica(veiculo, [item])
+  );
+});
+
+if (veiculoPadraoAdequado) {
+  veiculoPadraoItem = veiculoPadraoAdequado;
+} else {
+  veiculoPadraoItem = null;
+}
+
+    let viagemEncontrada = null;
+
+    /*
+      Tenta aproveitar uma viagem já criada.
+    */
+    for (const viagem of frota) {
+      const itensTeste = [...viagem.itens, item];
+      const novoPeso = viagem.pesoAtual + pesoItem;
+      const novoVolume = viagem.volumeAtual + volumeItem;
+
+      const { maiorComp, maiorLarg, maiorAlt } =
+        obterMaioresDimensoes(itensTeste);
+
+      /*
+        Só coloca o item em um veículo personalizado existente
+        quando nenhum veículo padrão consegue transportar o item.
+      */
+      if (
+        viagem.veiculo.personalizado &&
+        !veiculoPadraoItem &&
+        novoPeso <= viagem.veiculo.pesoMax &&
+        novoVolume <= viagem.veiculo.volMax &&
+        testarArrumacaoFisica(viagem.veiculo, itensTeste)
+      ) {
+        viagemEncontrada = viagem;
+        break;
+      }
+
+      /*
+        Não transforma uma viagem personalizada em veículo padrão.
+      */
+      if (viagem.veiculo.personalizado) {
+        continue;
+      }
+
+      const veiculoTeste = escolherVeiculoIdeal(
+        novoPeso,
+        novoVolume,
+        maiorComp,
+        maiorLarg,
+        maiorAlt,
+        itensTeste,
+      );
+
+      const veiculoAtual = encontrarVeiculoComArrumacao(
+        dbVeiculos.findIndex(
+          (veiculo) => veiculo.nome === veiculoTeste.nome,
+        ),
+        itensTeste,
+      );
+
+      if (
+        veiculoAtual &&
+        novoPeso <= veiculoAtual.pesoMax &&
+        novoVolume <= veiculoAtual.volMax &&
+        testarArrumacaoFisica(veiculoAtual, itensTeste)
+      ) {
+        viagem.veiculo = veiculoAtual;
+        viagemEncontrada = viagem;
+        break;
+      }
+    }
+
+    /*
+      Se não coube em nenhuma viagem existente,
+      cria uma nova viagem.
+    */
+    if (!viagemEncontrada) {
+      let veiculoFinal = null;
+
+      if (veiculoPadraoItem) {
+        // Carga comum: usa o menor veículo padrão adequado.
+        veiculoFinal = veiculoPadraoItem;
+      } else if (
+        veiculoPersonalizado &&
+        pesoItem <= veiculoPersonalizado.pesoMax &&
+        volumeItem <= veiculoPersonalizado.volMax &&
+        testarArrumacaoFisica(veiculoPersonalizado, [item])
+      ) {
+        // Carga especial: usa o veículo personalizado.
+        veiculoFinal = veiculoPersonalizado;
+      } else if (
+  veiculoPersonalizado &&
+  pesoItem <= veiculoPersonalizado.pesoMax &&
+  item.comp <= veiculoPersonalizado.compFisico &&
+  item.larg <= veiculoPersonalizado.largFisica
+) {
+  /*
+    A carga cabe sobre a base do veículo personalizado.
+    Altura e volume acima da referência serão tratados
+    pelo alerta operacional/AET.
+  */
+  veiculoFinal = veiculoPersonalizado;
+} else {
+  /*
+    Nenhum veículo atende adequadamente.
+    Se o usuário selecionou um veículo personalizado,
+    ele permanece como referência para mostrar a incompatibilidade.
+  */
+  veiculoFinal =
+    veiculoPersonalizado || dbVeiculos[dbVeiculos.length - 1];
+}
+
+      viagemEncontrada = criarViagem(veiculoFinal);
+      frota.push(viagemEncontrada);
+    }
+
+    viagemEncontrada.itens.push(item);
+    viagemEncontrada.pesoAtual += pesoItem;
+    viagemEncontrada.volumeAtual += volumeItem;
+
+    viagemEncontrada.areaAtual = calcularAreaPisoEstimada(
+      viagemEncontrada.itens,
+      viagemEncontrada.veiculo,
+    );
+
+    viagemEncontrada.maiorComprimento = Math.max(
+      viagemEncontrada.maiorComprimento,
+      item.comp,
+    );
+
+    viagemEncontrada.maiorLargura = Math.max(
+      viagemEncontrada.maiorLargura,
+      item.larg,
+    );
+
+    viagemEncontrada.maiorAltura = Math.max(
+      viagemEncontrada.maiorAltura,
+      item.alt,
+    );
+  });
+
+  return frota;
+}
+
+function planejarFrota(listaCarga, veiculoSelecionado = null) {
+  const cargaAgrupada =
+    dividirItensQueExcedemMaiorVeiculo(listaCarga);
+
+  const pesoTotal = cargaAgrupada.reduce(
+    (total, item) => total + item.peso * item.qtd,
+    0,
+  );
+
+  const volumeTotal = cargaAgrupada.reduce(
+    (total, item) =>
+      total +
+      item.comp *
+        item.larg *
+        item.alt *
+        item.qtd,
+    0,
+  );
+
+  const { maiorComp, maiorLarg, maiorAlt } =
+    obterMaioresDimensoes(cargaAgrupada);
+
+      // =====================================================
+  // PRIORIDADE AO VEÍCULO SELECIONADO PELO USUÁRIO
+  // =====================================================
+
+  if (
+    veiculoSelecionado &&
+    pesoTotal <= veiculoSelecionado.pesoMax &&
+    volumeTotal <= veiculoSelecionado.volMax &&
+    testarArrumacaoFisica(
+      veiculoSelecionado,
+      cargaAgrupada,
+    )
+  ) {
+    const viagem = criarViagem(
+      veiculoSelecionado,
+    );
+
+    viagem.itens = cargaAgrupada;
+    viagem.pesoAtual = pesoTotal;
+    viagem.volumeAtual = volumeTotal;
+
+    viagem.areaAtual = calcularAreaPisoEstimada(
+      cargaAgrupada,
+      veiculoSelecionado,
+    );
+
+    viagem.maiorComprimento = maiorComp;
+    viagem.maiorLargura = maiorLarg;
+    viagem.maiorAltura = maiorAlt;
+
+    const veiculoMenor = verificarVeiculoMenorDisponivel(
+      veiculoSelecionado,
+      cargaAgrupada,
+      pesoTotal,
+      volumeTotal,
+    );
+
+    sugestaoVeiculoMenor = veiculoMenor
+      ? {
+          selecionado: veiculoSelecionado.nome,
+          menor: veiculoMenor.nome,
+          indiceMenor: dbVeiculos.findIndex(
+            (v) => v.nome === veiculoMenor.nome,
+          ),
+        }
+      : null;
+
+    return [viagem];
+  }
+
+  sugestaoVeiculoMenor = null;
+
+  const veiculoInicial = escolherVeiculoIdeal(
+    pesoTotal,
+    volumeTotal,
+    maiorComp,
+    maiorLarg,
+    maiorAlt,
+    cargaAgrupada,
+  );
+
+  const indiceInicial = dbVeiculos.findIndex(
+    (veiculo) =>
+      veiculo.nome === veiculoInicial.nome,
+  );
+
+ let veiculoParaCargaCompleta =
+  encontrarVeiculoComArrumacao(
+    indiceInicial,
+    cargaAgrupada,
+  );
+
+  const cargaCompletaCabe =
+    veiculoParaCargaCompleta &&
+    pesoTotal <= veiculoParaCargaCompleta.pesoMax &&
+    volumeTotal <= veiculoParaCargaCompleta.volMax &&
+    testarArrumacaoFisica(
+      veiculoParaCargaCompleta,
+      cargaAgrupada,
+    );
+
+  if (cargaCompletaCabe) {
+    const viagem = criarViagem(
+      veiculoParaCargaCompleta,
+    );
+
+    viagem.itens = cargaAgrupada;
+    viagem.pesoAtual = pesoTotal;
+    viagem.volumeAtual = volumeTotal;
+
+    viagem.areaAtual = calcularAreaPisoEstimada(
+      cargaAgrupada,
+      veiculoParaCargaCompleta,
+    );
+
+    viagem.maiorComprimento = maiorComp;
+    viagem.maiorLargura = maiorLarg;
+    viagem.maiorAltura = maiorAlt;
+
+    return [viagem];
+  }
+
+  return planejarFrotaFracionada(
+    listaCarga,
+    veiculoSelecionado,
+  );
+}
+
+// =====================================================
+// CÁLCULO PRINCIPAL DA CARGA
+// =====================================================
+
+function verificarAlertaAET(cargas) {
+  const alertas = [];
+
+  let encontrouLargura = false;
+  let encontrouAltura = false;
+  let encontrouComprimento = false;
+  let encontrouPeso = false;
+
+  cargas.forEach((viagem, indice) => {
+    const veiculo = viagem.veiculo;
+
+    let largura = false;
+    let altura = false;
+    let comprimento = false;
+    let peso = false;
+
+    const pesoTotal = viagem.pesoAtual;
+
+    if (pesoTotal > 57000) {
+      peso = true;
+      encontrouPeso = true;
+    }
+
+    viagem.itens.forEach((item) => {
+      if (item.larg > 2.6) {
+        largura = true;
+        encontrouLargura = true;
+      }
+
+      if (item.alt > 4.4) {
+        altura = true;
+        encontrouAltura = true;
+      }
+
+      if (item.comp > 30) {
+        comprimento = true;
+        encontrouComprimento = true;
+      }
+    });
+
+    if (largura) {
+      alertas.push(
+        `Veículo ${indice + 1} — ${escaparHtml(veiculo.nome)}: Largura ${viagem.maiorLargura.toFixed(2)} m — excede o limite de 2,60 m`
+      );
+    }
+
+    if (altura) {
+      alertas.push(
+        `Veículo ${indice + 1} — ${escaparHtml(veiculo.nome)}: Altura ${viagem.maiorAltura.toFixed(2)} m — excede o limite de 4,40 m`
+      );
+    }
+
+    if (comprimento) {
+      alertas.push(
+        `Veículo ${indice + 1} — ${escaparHtml(veiculo.nome)}: Comprimento ${viagem.maiorComprimento.toFixed(2)} m — excede o limite de 30,00 m`
+      );
+    }
+
+    if (peso) {
+      alertas.push(
+        `Veículo ${indice + 1} — ${escaparHtml(veiculo.nome)}: Peso ${pesoTotal.toLocaleString(
+          "pt-BR"
+        )} kg — excede o limite de 57.000 kg`
+      );
+    }
+  });
+
+  if (alertas.length === 0) {
+    return null;
+  }
+
+  let conceitoGuia = "aet";
+let veiculoGuia = "";
+
+const somentePeso =
+  encontrouPeso &&
+  !encontrouLargura &&
+  !encontrouAltura &&
+  !encontrouComprimento;
+
+const somenteAltura =
+  encontrouAltura &&
+  !encontrouLargura &&
+  !encontrouComprimento &&
+  !encontrouPeso;
+
+  const somenteComprimento =
+  encontrouComprimento &&
+  !encontrouAltura &&
+  !encontrouLargura &&
+  !encontrouPeso;
+
+if (somentePeso) {
+  conceitoGuia = "pbtc";
+}
+
+if (somenteAltura) {
+  conceitoGuia = "";
+  veiculoGuia = "prancha-rebaixada";
+}
+
+if (somenteComprimento) {
+  conceitoGuia = "";
+  veiculoGuia = "prancha-extensivel";
+}
+
+  return {
+    titulo: "ALERTA OPERACIONAL — POSSÍVEL NECESSIDADE DE AET",
+
+    conceitoGuia,
+    veiculoGuia,
+
+    mensagem: `
+      Durante o planejamento da carga foram identificados parâmetros que podem exigir procedimentos operacionais específicos, conforme a configuração final do conjunto e a legislação vigente.
+      <br><br>
+
+      ${alertas.join("<br>")}
+
+      <br><br>
+
+      <strong>ANTES DE INICIAR A OPERAÇÃO, VERIFIQUE:</strong><br>
+      • Confirmar a necessidade de AET;<br>
+      • Conferir PBTC e capacidade do conjunto;<br>
+      • Verificar a distribuição de peso por eixo;<br>
+      • Calcular a altura total do conjunto carregado;<br>
+      • Confirmar largura e comprimento finais da operação;<br>
+      • Verificar restrições de rota e horário;<br>
+      • Avaliar necessidade de escolta;<br>
+      • Conferir berços, calços, apoios e sistemas de fixação.
+
+      <br><br>
+
+      <strong>ATENÇÃO:</strong>
+      A confirmação definitiva depende da configuração completa do conjunto,
+      da rota e das exigências do órgão responsável pela via.
+    `,
+  };
+}
+
+// =====================================================
+// PIOR CASO ENTRE OS VEÍCULOS DA FROTA
+//
+// Cada veículo tem a sua própria análise de centro de gravidade e de
+// encaixe físico, mas o selo de status e os relatórios (PDF / Excel)
+// mostram um único resultado. Aqui o veículo em PIOR situação decide,
+// para que o aviso de um veículo não se perca só porque outro veículo
+// foi desenhado depois dele.
+// =====================================================
+
+function pontuarGravidadeCgDoVeiculo(estado) {
+  const critico =
+    (estado.ressalva && estado.ressalva.nivel === "critico") ||
+    (estado.lateral && estado.lateral.nivel === "critico");
+
+  if (critico) return 4;
+  if (estado.ressalva) return 3;
+  if (estado.longitudinal) return 2;
+  if (estado.lateral) return 1;
+
+  return 0;
+}
+
+// Um aviso CRÍTICO nunca pode ficar escondido atrás de um aviso mais leve.
+// O selo mostra um aviso por vez (CG > longitudinal > lateral); se o crítico
+// for o lateral e houver um aviso de CG ou longitudinal mais leve, tira esses
+// dois da frente para o crítico aparecer e bloquear os relatórios.
+function priorizarCgCriticoNoSelo() {
+  const ressalvaCritica =
+    ressalvaCgAtual && ressalvaCgAtual.nivel === "critico";
+
+  const lateralCritico =
+    mensagemTransversalCgAtual &&
+    mensagemTransversalCgAtual.nivel === "critico";
+
+  if (lateralCritico && !ressalvaCritica) {
+    ressalvaCgAtual = null;
+    orientacaoLongitudinalCgAtual = null;
+  }
+}
+
+function aplicarPiorCasoDaFrota(estados) {
+  // Com um único veículo nada muda: os avisos já são os dele.
+  if (estados.length <= 1) {
+    return;
+  }
+
+  globalEstorouMetragem = estados.some((estado) => estado.estourou);
+
+  let pior = estados[0];
+  let piorPontos = pontuarGravidadeCgDoVeiculo(pior);
+
+  estados.forEach((estado) => {
+    const pontos = pontuarGravidadeCgDoVeiculo(estado);
+
+    if (pontos > piorPontos) {
+      pior = estado;
+      piorPontos = pontos;
+    }
+  });
+
+  if (piorPontos === 0) {
+    ressalvaCgAtual = null;
+    mensagemTransversalCgAtual = null;
+    orientacaoLongitudinalCgAtual = null;
+    return;
+  }
+
+  const prefixo = `Veículo ${pior.indice + 1} — ${pior.nomeVeiculo}: `;
+
+  const comPrefixo = (aviso) =>
+    aviso ? { ...aviso, mensagem: prefixo + aviso.mensagem } : null;
+
+  ressalvaCgAtual = comPrefixo(pior.ressalva);
+  mensagemTransversalCgAtual = comPrefixo(pior.lateral);
+  orientacaoLongitudinalCgAtual = comPrefixo(pior.longitudinal);
+}
+
+function calcularCarga() {
+  ressalvaCgAtual = null;
+  orientacaoLongitudinalCgAtual = null;
+
+  const lines = document.querySelectorAll("#tabela-carga tbody tr");
+
+  // Esconde resultados se não houver linhas
+  if (lines.length === 0) {
+    document.getElementById("bloco-resultados").style.display = "none";
+    document.getElementById("bloco-mapa").style.display = "none";
+    document.getElementById("alerta-frota").style.display = "none";
+    document.getElementById("sugestao-frota").style.display = "none";
+    document.getElementById("selo-compatibilidade").style.display = "none";
+    document.getElementById("btn-gerar-pdf").style.display = "none";
+    document.getElementById("btn-excel").style.display = "none";
+    return;
+  }
+
+  if (verificarItensIncompletos()) {
+  document.getElementById("bloco-resultados").style.display = "none";
+  document.getElementById("bloco-mapa").style.display = "none";
+  document.getElementById("alerta-frota").style.display = "none";
+  document.getElementById("sugestao-frota").style.display = "none";
+  document.getElementById("selo-compatibilidade").style.display = "none";
+  document.getElementById("btn-gerar-pdf").style.display = "none";
+  document.getElementById("btn-excel").style.display = "none";
+  return;
+}
+
+  salvarNoHistorico();
+
+  let volTotal = 0,
+    pesoTotal = 0;
+  let itemEstouraDimensao = false;
+  let listaCarga = [];
+  let maiorCompItem = 0,
+    maiorLargItem = 0,
+    maiorAltItem = 0;
+
+  const valorSelectVeiculo = document.getElementById("select-veiculo").value;
+  let indexSel = parseInt(valorSelectVeiculo);
+  let vSelecionado;
+
+  if (valorSelectVeiculo === "personalizado") {
+    const nomePersonalizado = document.getElementById("vp-nome").value.trim().slice(0, 60);
+    const pesoPersonalizado = parseFloat(
+      document.getElementById("vp-peso").value,
+    );
+    const compPersonalizado =
+      parseFloat(document.getElementById("vp-comp").value) / 100;
+    const largPersonalizado =
+      parseFloat(document.getElementById("vp-larg").value) / 100;
+    const altPersonalizado =
+      parseFloat(document.getElementById("vp-alt").value) / 100;
+      const qtdConjuntosPersonalizados = Math.max(
+      parseInt(document.getElementById("vp-qtd").value) || 1,
+  1,
+);
+
+    const valorValido = (numero) => Number.isFinite(numero) && numero > 0;
+
+    if (
+      !nomePersonalizado ||
+      !valorValido(pesoPersonalizado) ||
+      !valorValido(compPersonalizado) ||
+      !valorValido(largPersonalizado) ||
+      !valorValido(altPersonalizado)
+    ) {
+      alert("Preencha todos os dados do veículo personalizado com valores maiores que zero.");
+      return;
+    }
+
+    vSelecionado = {
+      nome: nomePersonalizado,
+      pesoMax: pesoPersonalizado,
+      compFisico: compPersonalizado,
+      largFisica: largPersonalizado,
+      altFisica: altPersonalizado,
+      volMax: compPersonalizado * largPersonalizado * altPersonalizado,
+      personalizado: true,
+      qtdConjuntos: qtdConjuntosPersonalizados,
+    };
+
+    indexSel = -1;
+  } else {
+    vSelecionado = dbVeiculos[indexSel];
+  }
+
+  lines.forEach((linha, index) => {
+    try {
+      const nome = linha.querySelector(".nome").value || `Item ${index + 1}`;
+      const qtd = parseInt(linha.querySelector(".qtd").value) || 0;
+
+      const comp =
+        Math.max(
+          parseFloat(
+            linha.querySelector(".comp").value.replace(/\./g, "").replace(",", "."),
+          ) || 0,
+          0,
+        ) / 100;
+      const larg =
+        Math.max(
+          parseFloat(
+            linha.querySelector(".larg").value.replace(/\./g, "").replace(",", "."),
+          ) || 0,
+          0,
+        ) / 100;
+      const alt =
+        Math.max(
+          parseFloat(
+            linha.querySelector(".alt").value.replace(/\./g, "").replace(",", "."),
+          ) || 0,
+          0,
+        ) / 100;
+
+      let pesoInput = linha.querySelector(".peso").value.trim();
+      const peso = Math.max(
+        Number(pesoInput.replace(/\./g, "").replace(",", ".")) || 0,
+        0,
+      );
+
+      if (qtd > 0 && comp > 0 && larg > 0 && alt > 0) {
+        volTotal += comp * larg * alt * qtd;
+        pesoTotal += peso * qtd;
+
+        if (comp > maiorCompItem) maiorCompItem = comp;
+        if (larg > maiorLargItem) maiorLargItem = larg;
+        if (alt > maiorAltItem) maiorAltItem = alt;
+
+        if (
+          comp > vSelecionado.compFisico ||
+          larg > vSelecionado.largFisica ||
+          alt > vSelecionado.altFisica
+        ) {
+          itemEstouraDimensao = true;
+        }
+      }
+
+      listaCarga.push({
+        id: index + 1,
+        crachaId: parseInt(linha.dataset.itemId, 10) || index + 1,
+        nome: nome,
+        qtd: qtd,
+        comp: comp,
+        larg: larg,
+        alt: alt,
+        peso: peso,
+        cor: coresItens[index % coresItens.length],
+      });
+    } catch (e) {
+      console.error("Erro na linha " + index, e);
+    }
+  });
+
+  let veiculoCalculado = null;
+let volMaxCalculado = 0;
+let cargas = [];
+
+  assinaturaCargaAtual = JSON.stringify({
+    veiculo: valorSelectVeiculo,
+    itens: listaCarga.map((i) => [
+      i.crachaId,
+      i.nome,
+      i.qtd,
+      i.comp,
+      i.larg,
+      i.alt,
+      i.peso,
+    ]),
+  });
+
+  // --- LÓGICA DE EXIBIÇÃO E ALERTAS ---
+
+  if (listaCarga.length > 0) {
+    document.getElementById("bloco-mapa").style.display = "block";
+
+    const container = document.getElementById("container-veiculos");
+    container.innerHTML = "";
+
+     cargas = planejarFrota(listaCarga, vSelecionado);
+    ultimaFrotaCalculada = cargas;
+
+    veiculoCalculado = cargas.reduce((maior, carga) => {
+      const indiceMaior = dbVeiculos.findIndex((v) => v.nome === maior.nome);
+
+      const indiceAtual = dbVeiculos.findIndex(
+        (v) => v.nome === carga.veiculo.nome,
+      );
+
+      return indiceAtual > indiceMaior ? carga.veiculo : maior;
+    }, cargas[0].veiculo);
+
+    volMaxCalculado =
+      veiculoCalculado.compFisico *
+      veiculoCalculado.largFisica *
+      veiculoCalculado.altFisica;
+
+    const indiceVeiculoCalculado = dbVeiculos.findIndex(
+      (v) => v.nome === veiculoCalculado.nome,
+    );
+
+    if (
+  !vSelecionado.personalizado &&
+  indiceVeiculoCalculado !== indexSel &&
+  indiceVeiculoCalculado !== -1 &&
+  !trocaAutomaticaVeiculo
+) {
+      avisoTrocaVeiculo = {
+        original: vSelecionado.nome,
+        calculado: veiculoCalculado.nome,
+      };
+
+      trocaAutomaticaVeiculo = true;
+
+      document.getElementById("select-veiculo").value = indiceVeiculoCalculado;
+
+      verificarVeiculoPersonalizado();
+
+      calcularCarga();
+
+      return;
+    }
+
+    trocaAutomaticaVeiculo = false;
+    alertaOperacionalAET = verificarAlertaAET(cargas);
+
+    const idsExcedentesAcumulados = new Set();
+    const estadosPorVeiculo = [];
+
+    cargas.forEach((carga, indice) => {
+      const numero = indice + 1;
+
+      criarMapaVeiculo(numero);
+
+      const pesoVeiculo = carga.pesoAtual || 0;
+      const volumeVeiculo = carga.volumeAtual || 0;
+
+      const areaBrutaVeiculo = carga.areaAtual || 0;
+
+      const areaMaxVeiculo =
+        carga.veiculo.compFisico * carga.veiculo.largFisica;
+
+      const areaVeiculo = Math.min(areaBrutaVeiculo, areaMaxVeiculo);
+
+      const volMaxVeiculo =
+        carga.veiculo.compFisico *
+        carga.veiculo.largFisica *
+        carga.veiculo.altFisica;
+
+      const pctPesoVeiculo = Math.min(
+        (pesoVeiculo / carga.veiculo.pesoMax) * 100,
+        100,
+      );
+
+      const pctVolVeiculo = Math.min(
+        (volumeVeiculo / volMaxVeiculo) * 100,
+        100,
+      );
+
+      document.getElementById(`titulo-veiculo-${numero}`).innerHTML = `
+<div class="card-veiculo">
+
+    <div class="card-veiculo-titulo">
+
+        <span class="card-veiculo-icone">🚚</span>
+        <span>${escaparHtml(carga.veiculo.nome)}</span>
+    </div>
+
+   <div class="card-veiculo-grid">
+
+        <div class="card-veiculo-label">⚖️ Peso</div>
+        <div>
+            <strong class="card-veiculo-valor">${formatarBR(pesoVeiculo)}</strong>
+            <span class="card-veiculo-complemento">/ ${formatarBR(carga.veiculo.pesoMax)} kg</span>
+        </div>
+
+        <div class="card-veiculo-label">📦 Volume</div>
+        <div>
+            <strong class="card-veiculo-valor">${formatarBR(volumeVeiculo)}</strong>
+            <span class="card-veiculo-complemento">/ ${formatarBR(volMaxVeiculo)} m³</span>
+        </div>
+
+        <div class="card-veiculo-label">📐 Área útil</div>
+        <div>
+            <strong class="card-veiculo-valor">${formatarBR(areaVeiculo)}</strong>
+            <span class="card-veiculo-complemento">/ ${formatarBR(areaMaxVeiculo)} m²</span>
+        </div>
+
+    </div>
+
+</div>
+`;
+
+      document.getElementById(`peso-veiculo-${numero}`).innerText =
+        formatarBR(pesoVeiculo);
+
+      document.getElementById(`peso-max-veiculo-${numero}`).innerText =
+        formatarBR(carga.veiculo.pesoMax);
+
+      document.getElementById(`vol-veiculo-${numero}`).innerText =
+        formatarBR(volumeVeiculo);
+
+      document.getElementById(`vol-max-veiculo-${numero}`).innerText =
+        formatarBR(volMaxVeiculo);
+
+      const barPesoVeiculo = document.getElementById(
+        `bar-peso-veiculo-${numero}`,
+      );
+
+      barPesoVeiculo.style.width = pctPesoVeiculo.toFixed(0) + "%";
+
+      barPesoVeiculo.innerText = pctPesoVeiculo.toFixed(0) + "%";
+      barPesoVeiculo.classList.remove(
+        "fill-verde",
+        "fill-amarelo",
+        "fill-vermelho",
+        "fill-piscando",
+      );
+
+      if (pctPesoVeiculo >= 100) {
+        barPesoVeiculo.classList.add("fill-vermelho");
+      } else if (pctPesoVeiculo >= 80) {
+        barPesoVeiculo.classList.add("fill-amarelo");
+      } else {
+        barPesoVeiculo.classList.add("fill-verde");
+      }
+
+      const barVolVeiculo = document.getElementById(
+        `bar-vol-veiculo-${numero}`,
+      );
+
+      barVolVeiculo.style.width = pctVolVeiculo.toFixed(0) + "%";
+
+      barVolVeiculo.innerText = pctVolVeiculo.toFixed(0) + "%";
+      barVolVeiculo.classList.remove(
+        "fill-verde",
+        "fill-amarelo",
+        "fill-vermelho",
+        "fill-piscando",
+      );
+
+      if (pctVolVeiculo >= 100) {
+        barVolVeiculo.classList.add("fill-vermelho");
+      } else if (pctVolVeiculo >= 80) {
+        barVolVeiculo.classList.add("fill-amarelo");
+      } else {
+        barVolVeiculo.classList.add("fill-verde");
+      }
+
+      renderizarArrumacaoLogica(
+  carga.veiculo,
+  carga.itens,
+  `svg-${numero}`,
+  `legenda-${numero}`,
+  `dimesoes-${numero}`,
+);
+
+      estadosPorVeiculo.push({
+        indice,
+        nomeVeiculo: carga.veiculo.nome,
+        ressalva: ressalvaCgAtual,
+        lateral: mensagemTransversalCgAtual,
+        longitudinal: orientacaoLongitudinalCgAtual,
+        estourou: globalEstorouMetragem,
+      });
+
+      globalItensExcedentes.forEach((item) => {
+        idsExcedentesAcumulados.add(item.id);
+      });
+    });
+
+    estadosCgPorVeiculo = estadosPorVeiculo.map((estado) => ({
+      ressalva: estado.ressalva,
+      lateral: estado.lateral,
+      longitudinal: estado.longitudinal,
+    }));
+
+    automaticoCriticoPorVeiculo = {};
+
+    estadosPorVeiculo.forEach((estado) => {
+      automaticoCriticoPorVeiculo[estado.indice + 1] =
+        pontuarGravidadeCgDoVeiculo(estado) === 4;
+    });
+
+    aplicarPiorCasoDaFrota(estadosPorVeiculo);
+    priorizarCgCriticoNoSelo();
+
+    document.querySelectorAll("#tabela-carga tbody tr").forEach((linha, index) => {
+      linha.classList.toggle(
+        "linha-excedente",
+        idsExcedentesAcumulados.has(index + 1),
+      );
+    });
+  } else {
+    document.getElementById("bloco-mapa").style.display = "none";
+    globalEstorouMetragem = false;
+  }
+  
+  const divAlerta = document.getElementById("alerta-frota");
+  const divSugestao = document.getElementById("sugestao-frota");
+  const selo = document.getElementById("selo-compatibilidade");
+  const btnPdf = document.getElementById("btn-gerar-pdf");
+  const btnExcel = document.getElementById("btn-excel");
+
+if (listaCarga.length === 0) {
+  selo.style.display = "none";
+  btnPdf.style.display = "none";
+  btnExcel.style.display = "none";
+  divAlerta.style.display = "none";
+  divSugestao.style.display = "none";
+
+} else if (globalEstorouMetragem) {
+  selo.style.display = "block";
+  selo.className = "selo-compatibilidade selo-nao-compativel";
+  selo.innerHTML = `
+    <i class="fa-solid fa-circle-xmark"></i>
+    <span>OPERAÇÃO NÃO COMPATÍVEL</span>
+  `;
+
+  btnPdf.style.display = "none";
+  btnExcel.style.display = "none";
+
+  divAlerta.style.display = "block";
+  divAlerta.innerHTML = `
+    ⚠️ <strong>ALERTA DE ARRUMAÇÃO:</strong><br>
+    A carga foi distribuída na frota calculada, porém algum item excedeu a disposição física no mapa.
+    Revise a arrumação ou considere fracionar a carga.
+  `;
+
+  divSugestao.style.display = "none";
+
+} else {
+  divAlerta.style.display = "none";
+
+  if (avisoTrocaVeiculo) {
+    divSugestao.style.display = "block";
+
+    divSugestao.innerHTML = `
+      🔄 <strong>VEÍCULO AJUSTADO AUTOMATICAMENTE</strong><br>
+      O veículo inicialmente selecionado foi
+      <strong>${escaparHtml(avisoTrocaVeiculo.original)}</strong>.<br>
+      Após analisar as dimensões, o peso e a margem operacional de segurança da carga, o sistema identificou que
+      <strong>${escaparHtml(avisoTrocaVeiculo.calculado)}</strong>
+      é a opção mais adequada para realizar esta operação.
+    `;
+
+    avisoTrocaVeiculo = null;
+  } else if (sugestaoVeiculoMenor) {
+    divSugestao.style.display = "block";
+
+    divSugestao.innerHTML = `
+      💡 <strong>VEÍCULO MENOR DISPONÍVEL</strong><br>
+      Esta carga também cabe em um veículo menor:
+      <strong>${escaparHtml(sugestaoVeiculoMenor.menor)}</strong>
+      (selecionado atualmente: <strong>${escaparHtml(sugestaoVeiculoMenor.selecionado)}</strong>).<br>
+      <button type="button" class="btn-usar-sugestao" onclick="usarVeiculoSugerido(${sugestaoVeiculoMenor.indiceMenor})">
+        Usar ${escaparHtml(sugestaoVeiculoMenor.menor)}
+      </button>
+    `;
+  } else {
+    divSugestao.style.display = "none";
+  }
+
+const cargaAprovada =
+  !globalEstorouMetragem &&
+  !itemEstouraDimensao &&
+  cargas.every(
+    (viagem) => viagem.pesoAtual <= viagem.veiculo.pesoMax
+  );
+
+/*
+  C3 - VERIFICAÇÃO DE LIMITE OPERACIONAL DA FROTA
+
+  Identifica viagens que ainda estão dentro da
+  capacidade máxima cadastrada, mas utilizam
+  95% ou mais da capacidade de peso.
+*/
+
+const cargaEmLimiteOperacional =
+  cargaAprovada &&
+  cargas.some((viagem) => {
+    const percentualPeso =
+      viagem.pesoAtual / viagem.veiculo.pesoMax;
+
+    return (
+      percentualPeso >= LIMITE_PESO_ATENCAO &&
+      percentualPeso <= 1
+    );
+  });
+
+// Distribuição CRÍTICA (CG ou lateral) tem prioridade sobre os outros avisos
+// do selo, porque é a que bloqueia o PDF e o Excel.
+const cgCritico =
+  (ressalvaCgAtual && ressalvaCgAtual.nivel === "critico") ||
+  (mensagemTransversalCgAtual &&
+    mensagemTransversalCgAtual.nivel === "critico");
+
+if (cargaAprovada && alertaOperacionalAET && !cgCritico) {
+  // A carga cabe, mas exige atenção regulatória.
+  selo.style.display = "block";
+  selo.className = "selo-compatibilidade selo-atencao";
+  selo.innerHTML = `
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <span>ATENÇÃO REGULATÓRIA
+Verifique a necessidade de AET</span>
+  `;
+
+  // Continua permitindo os relatórios.
+  btnPdf.style.display = "block";
+  btnExcel.style.display = "block";
+
+} else if (
+  cargaAprovada &&
+  cargaEmLimiteOperacional &&
+  !cgCritico
+) {
+  /*
+    A carga ainda está dentro da capacidade máxima,
+    mas atingiu a faixa operacional de 95% ou mais.
+  */
+
+  selo.style.display = "block";
+  selo.className =
+    "selo-compatibilidade selo-atencao";
+
+  selo.innerHTML = `
+  <i class="fa-solid fa-triangle-exclamation"></i>
+  <span>
+    LIMITE OPERACIONAL -
+    Avalie outro veículo ou o fracionamento da carga.
+    <a
+  href="src/veiculos-especiais-busca-inteligente.html"
+  class="link-guia-limite"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+      Consulte o Guia Operacional
+    </a>
+  </span>
+`;
+
+  /*
+    Como não estamos tratando 95% como
+    incompatibilidade física ou legal,
+    os relatórios continuam disponíveis.
+  */
+
+  btnPdf.style.display = "block";
+  btnExcel.style.display = "block";
+
+  divSugestao.style.display = "block";
+
+  divSugestao.innerHTML = `
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <strong>MARGEM OPERACIONAL DE PESO ATINGIDA</strong><br>
+
+    A carga permanece dentro da capacidade máxima
+    cadastrada do veículo, porém utiliza
+    95% ou mais da capacidade de peso.<br>
+
+    Como não foi encontrada uma alternativa superior
+    disponível na frota cadastrada, recomenda-se
+    avaliar o fracionamento da carga ou outra
+    configuração operacional.
+  `;
+
+} else if (cargaAprovada) {
+  selo.style.display = "block";
+
+  if (ressalvaCgAtual) {
+  selo.className =
+    "selo-compatibilidade selo-atencao";
+
+  const complementoC4 =
+    orientacaoLongitudinalCgAtual
+      ? `
+        <br>
+        <span class="c4-orientacao-inline">
+          <strong>Tendência longitudinal:</strong>
+          ${orientacaoLongitudinalCgAtual.regiao === "traseira"
+            ? "concentração predominante na região traseira."
+            : "concentração predominante na região dianteira."}
+        </span>
+      `
+      : "";
+
+  selo.innerHTML = `
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <span>
+      <strong>${ressalvaCgAtual.titulo}</strong><br>
+      ${escaparHtml(ressalvaCgAtual.mensagem)}
+
+      ${complementoC4}
+
+      <br>
+      <a
+        href="src/veiculos-especiais-busca-inteligente.html"
+        class="link-guia-limite"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Consulte o Guia Operacional
+      </a>
+    </span>
+  `;
+
+} else if (orientacaoLongitudinalCgAtual) {
+
+  selo.className =
+    "selo-compatibilidade selo-atencao";
+
+  selo.innerHTML = `
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <span>
+      <strong>${orientacaoLongitudinalCgAtual.titulo}</strong><br>
+      ${escaparHtml(orientacaoLongitudinalCgAtual.mensagem)}
+
+      <br>
+      <small>
+        Classificação interna do DCPRO para triagem matemática.
+        Não representa limite legal ou avaliação real da distribuição por eixo.
+      </small>
+
+      <br>
+      <a
+        href="src/veiculos-especiais-busca-inteligente.html"
+        class="link-guia-limite"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Consulte o Guia Operacional
+      </a>
+    </span>
+  `;
+
+
+} else if (mensagemTransversalCgAtual) {
+
+  selo.className =
+  "selo-compatibilidade selo-atencao";
+
+  selo.innerHTML = `
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <span>
+      <strong>${mensagemTransversalCgAtual.titulo}</strong><br>
+      ${escaparHtml(mensagemTransversalCgAtual.mensagem)}
+
+      <br>
+      <small>
+        Classificação interna do DCPRO para triagem matemática.
+        Não representa limite legal ou avaliação real de estabilidade do veículo.
+      </small>
+
+      <br>
+      <a
+        href="src/veiculos-especiais-busca-inteligente.html"
+        class="link-guia-limite"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Consulte o Guia Operacional
+      </a>
+    </span>
+  `;
+
+} else {
+  selo.className =
+    "selo-compatibilidade selo-cabe";
+
+  selo.innerHTML = `
+    <i class="fa-solid fa-circle-check"></i>
+    <span>CARGA APROVADA</span>
+  `;
+}
+
+  btnPdf.style.display = "block";
+  btnExcel.style.display = "block";
+
+} else {
+  selo.style.display = "block";
+  selo.className = "selo-compatibilidade selo-nao-compativel";
+  selo.innerHTML = `
+    <i class="fa-solid fa-circle-xmark"></i>
+    <span>OPERAÇÃO NÃO COMPATÍVEL</span>
+  `;
+
+  btnPdf.style.display = "none";
+  btnExcel.style.display = "none";
+}
+
+}
+
+  const divAlertaAET = document.getElementById("alerta-aet");
+
+if (divAlertaAET) {
+  if (alertaOperacionalAET) {
+    divAlertaAET.style.display = "block";
+
+    divAlertaAET.innerHTML = `
+      <div class="alerta-guia">
+        <div class="alerta-guia-texto">
+          <i class="fa-solid fa-circle-info"></i>
+
+          <div>
+            <strong>IMPORTANTE:</strong>
+            Antes de planejar um transporte especial, consulte o
+            <strong>Guia Operacional DCPRO</strong> para conhecer veículos,
+            aplicações e conceitos operacionais.
+          </div>
+        </div>
+
+        <a href="src/veiculos-especiais-busca-inteligente.html?${
+  alertaOperacionalAET.veiculoGuia
+    ? `veiculo=${alertaOperacionalAET.veiculoGuia}`
+    : `conceito=${alertaOperacionalAET.conceitoGuia}`
+}"
+   class="btn-consultar-guia-alerta">
+          <i class="fa-solid fa-book-open"></i>
+          Consultar Guia
+        </a>
+      </div>
+
+      <strong>${alertaOperacionalAET.titulo}</strong><br>
+      ${alertaOperacionalAET.mensagem}
+    `;
+
+  } else {
+    divAlertaAET.style.display = "none";
+  }
+}
+
+  // --- ATUALIZAÇÃO FINAL DAS BARRAS ---
+  document.getElementById("txt-peso").innerText = formatarBR(pesoTotal);
+  document.getElementById("max-peso").innerText = formatarBR(
+    veiculoCalculado.pesoMax,
+  );
+
+  let pctPeso = Math.min((pesoTotal / veiculoCalculado.pesoMax) * 100, 100);
+  document.getElementById("bar-peso").style.width = pctPeso.toFixed(0) + "%";
+  document.getElementById("bar-peso").innerText = pctPeso.toFixed(0) + "%";
+
+  const barPeso = document.getElementById("bar-peso");
+  barPeso.classList.remove(
+    "fill-verde",
+    "fill-amarelo",
+    "fill-vermelho",
+    "fill-piscando",
+  );
+
+  if (pesoTotal > veiculoCalculado.pesoMax) {
+    barPeso.classList.add("fill-piscando");
+  } else if (pctPeso >= 95) {
+    barPeso.classList.add("fill-vermelho");
+  } else if (pctPeso >= 80) {
+    barPeso.classList.add("fill-amarelo");
+  } else {
+    barPeso.classList.add("fill-verde");
+  }
+
+  document.getElementById("txt-vol").innerText = formatarBR(volTotal);
+  document.getElementById("max-vol").innerText = formatarBR(volMaxCalculado);
+
+  let pctVol = Math.min((volTotal / volMaxCalculado) * 100, 100);
+  const barVol = document.getElementById("bar-vol");
+  barVol.style.width = pctVol.toFixed(0) + "%";
+  barVol.innerText = pctVol.toFixed(0) + "%";
+
+  barVol.classList.remove(
+    "fill-verde",
+    "fill-amarelo",
+    "fill-vermelho",
+    "fill-piscando",
+  );
+
+  if (volTotal > volMaxCalculado || globalEstorouMetragem) {
+    barVol.classList.add("fill-piscando");
+  } else if (pctVol > 100) {
+    barVol.classList.add("fill-vermelho");
+  } else if (pctVol >= 95) {
+    barVol.classList.add("fill-verde");
+  } else if (pctVol >= 80) {
+    barVol.classList.add("fill-amarelo");
+  } else {
+    barVol.classList.add("fill-verde");
+  }
+
+  document.getElementById("bloco-resultados").style.display = "none";
+}
+
+function usarVeiculoSugerido(indice) {
+  document.getElementById("select-veiculo").value = indice;
+  verificarVeiculoPersonalizado();
+  sugestaoVeiculoMenor = null;
+  calcularCarga();
+}
+
+// =====================================================
+// RENDERIZAÇÃO DOS MAPAS E SVG
+// =====================================================
+
+function criarMapaVeiculo(numero) {
+  const container = document.getElementById("container-veiculos");
+
+  const bloco = document.createElement("div");
+
+  bloco.className = "bloco-veiculo";
+
+  bloco.innerHTML = `
+    <h3 id="titulo-veiculo-${numero}" class="titulo-veiculo">
+    🚚 Veículo ${numero}
+</h3>
+
+    <div id="resumo-veiculo-${numero}" class="resultados resumo-veiculo">
+        <strong>Resumo de Ocupação</strong>
+
+        <div class="metric-container">
+            <label>
+                <strong>Peso:</strong>
+                <span id="peso-veiculo-${numero}">0</span> kg de
+                <span id="peso-max-veiculo-${numero}">0</span> kg
+            </label>
+            <div class="bar-bg">
+                <div id="bar-peso-veiculo-${numero}" class="bar-fill fill-peso">0%</div>
+            </div>
+        </div>
+
+        <div class="metric-container">
+            <label>
+                <strong>Volume:</strong>
+                <span id="vol-veiculo-${numero}">0</span> m³ de
+                <span id="vol-max-veiculo-${numero}">0</span> m³
+            </label>
+            <div class="bar-bg">
+                <div id="bar-vol-veiculo-${numero}" class="bar-fill">0%</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="dimesoes-${numero}" class="dimensoes-bau-tag">
+        Dimensões Internas Disponíveis: -
+    </div>
+
+    <div class="abas-veiculo">
+      <button class="aba-veiculo-btn aba-ativa" onclick="alternarAbaVeiculo(${numero}, 'automatico')" data-veiculo="${numero}" data-aba="automatico">
+        Automático
+      </button>
+      <button class="aba-veiculo-btn" onclick="alternarAbaVeiculo(${numero}, 'personalizado')" data-veiculo="${numero}" data-aba="personalizado">
+        Personalizado
+      </button>
+    </div>
+
+    <div id="painel-automatico-${numero}" class="painel-aba-veiculo painel-aba-ativa">
+      <div class="canvas-container">
+              <svg id="svg-${numero}"
+                   width="750"
+                   height="220"
+                   class="svg-mapa-carga">
+              </svg>
+          </div>
+
+          <div class="legenda" id="legenda-${numero}"></div>
+    </div>
+
+    <div id="painel-personalizado-${numero}" class="painel-aba-veiculo">
+      <div class="aviso-personalizado">
+        ⚠️ <strong>MODO PERSONALIZADO — EDIÇÃO MANUAL.</strong>
+        A avaliação abaixo do desenho é recalculada a cada movimento
+        (centro de gravidade e caixas na Área de Espera). O resumo de
+        peso e volume e o selo de status no topo da página continuam
+        refletindo o <strong>cálculo automático original</strong>.
+        A responsabilidade pela distribuição final de peso, estabilidade
+        e amarração da carga é de quem realizar o carregamento — revise
+        cuidadosamente antes de usar este arranjo na prática.
+      </div>
+      <div id="avaliacao-personalizado-${numero}" class="avaliacao-personalizado"></div>
+      <div class="canvas-container">
+              <svg id="svg-personalizado-${numero}"
+                   width="750"
+                   height="220"
+                   class="svg-mapa-carga">
+              </svg>
+          </div>
+    </div>
+
+    `;
+
+  container.appendChild(bloco);
+}
+
+function alternarAbaVeiculo(numero, aba) {
+  const painelAutomatico = document.getElementById(`painel-automatico-${numero}`);
+  const painelPersonalizado = document.getElementById(`painel-personalizado-${numero}`);
+
+  if (painelAutomatico) {
+    painelAutomatico.classList.toggle("painel-aba-ativa", aba === "automatico");
+  }
+
+  if (painelPersonalizado) {
+    painelPersonalizado.classList.toggle("painel-aba-ativa", aba === "personalizado");
+  }
+
+  document
+    .querySelectorAll(`.aba-veiculo-btn[data-veiculo="${numero}"]`)
+    .forEach((botao) => {
+      botao.classList.toggle("aba-ativa", botao.dataset.aba === aba);
+    });
+}
+
+function posicionarCaixaComAET(caixa, veiculo) {
+  const excessoLateral =
+    caixa.comp <= veiculo.compFisico + 0.01 &&
+    caixa.larg > veiculo.largFisica &&
+    alertaOperacionalAET;
+
+  if (!excessoLateral) {
+    return false;
+  }
+
+  caixa.X_Fisico = 0;
+  caixa.Y_Fisico = 0;
+  caixa.compRender = caixa.comp;
+  caixa.largRender = veiculo.largFisica;
+  caixa.excessoAET = true;
+
+  return true;
+}
+
+/*
+  C3 - MARGEM OPERACIONAL DE PESO
+
+  Limites internos usados pelo DCPRO para diferenciar
+  capacidade máxima cadastrada de margem operacional
+  recomendada.
+
+  IMPORTANTE:
+  Estes percentuais são critérios de planejamento
+  do DCPRO e não representam, isoladamente,
+  limites legais de transporte.
+*/
+
+const LIMITE_PESO_NORMAL = 0.90;
+const LIMITE_PESO_ATENCAO = 0.95;
+
+// =====================================================
+// LEGENDA AGRUPADA POR ITEM
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// só monta a legenda visual, não participa de nenhum
+// cálculo de peso, encaixe ou centro de gravidade.
+// =====================================================
+
+function renderizarLegendaAgrupada(itens, legendaContainer) {
+  const itensLegenda = Object.values(
+    itens.reduce((agrupados, item) => {
+      const chave =
+        `${item.id}|${item.nome}|${item.comp}|${item.larg}|${item.alt}`;
+
+      if (!agrupados[chave]) {
+        agrupados[chave] = {
+          ...item,
+          qtd: 0,
+        };
+      }
+
+      agrupados[chave].qtd += Number(item.qtd) || 0;
+
+      return agrupados;
+    }, {})
+  );
+
+  const htmlLegenda = itensLegenda
+    .map(
+      (item) => `
+      <div class="legenda-item">
+          <div
+            class="legenda-cor"
+            style="background-color: ${item.cor};"
+          ></div>
+
+          <span>
+              <strong>Item ${item.id}</strong>
+              &nbsp;
+              <b>${escaparHtml(item.nome)}</b>
+              &nbsp;
+              ${item.qtd}x
+              &nbsp;•&nbsp;
+              ${item.comp.toFixed(2)}m ×
+              ${item.larg.toFixed(2)}m
+          </span>
+      </div>
+    `,
+    )
+    .join("");
+
+  legendaContainer.innerHTML += htmlLegenda;
+}
+
+// =====================================================
+// CABINE - REFERÊNCIA VISUAL
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// só desenha a cabine no mapa, não participa de
+// nenhum cálculo de peso, encaixe ou centro de gravidade.
+// =====================================================
+
+function desenharCabineReferencia(svgCima, offsetX, offsetY, alturaBauPixels) {
+  const grupoCabine = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "g"
+  );
+
+  grupoCabine.setAttribute(
+    "class",
+    "cabine-referencia-visual"
+  );
+
+  const larguraCabine = 85;
+
+  const alturaCabine =
+    Math.min(alturaBauPixels * 0.82, 135);
+
+  const cabineX =
+    offsetX - larguraCabine;
+
+  const cabineY =
+    offsetY +
+    (alturaBauPixels - alturaCabine) / 2;
+
+  const cabineCorpo = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "rect"
+  );
+
+  cabineCorpo.setAttribute("x", cabineX);
+  cabineCorpo.setAttribute("y", cabineY);
+  cabineCorpo.setAttribute("width", larguraCabine);
+  cabineCorpo.setAttribute("height", alturaCabine);
+  cabineCorpo.setAttribute("rx", "10");
+  cabineCorpo.setAttribute("ry", "10");
+  cabineCorpo.setAttribute("fill", "#e2e8f0");
+  cabineCorpo.setAttribute("stroke", "#475569");
+  cabineCorpo.setAttribute("stroke-width", "2");
+
+  grupoCabine.appendChild(cabineCorpo);
+
+  const cabineVidro = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "rect"
+  );
+
+  cabineVidro.setAttribute(
+    "x",
+    cabineX + 7
+  );
+
+  cabineVidro.setAttribute(
+    "y",
+    cabineY + 8
+  );
+
+  cabineVidro.setAttribute(
+    "width",
+    "12"
+  );
+
+  cabineVidro.setAttribute(
+    "height",
+    Math.max(alturaCabine - 16, 10)
+  );
+
+  cabineVidro.setAttribute("rx", "4");
+  cabineVidro.setAttribute("fill", "#94a3b8");
+
+  grupoCabine.appendChild(cabineVidro);
+
+  const tituloCabine = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "title"
+  );
+
+  tituloCabine.textContent =
+    "Cabine - referência visual de orientação. Não participa dos cálculos.";
+
+  grupoCabine.appendChild(tituloCabine);
+
+  svgCima.appendChild(grupoCabine);
+}
+
+// =====================================================
+// C4 - LINHA CENTRAL TRANSVERSAL
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// referência visual do centro da largura útil, não
+// participa de nenhum cálculo da carga.
+// =====================================================
+
+function desenharLinhaCentralTransversal(svgCima, offsetX, offsetY, larguraBauPixels, alturaBauPixels) {
+  const linhaCentralY =
+    offsetY + alturaBauPixels / 2;
+
+  const linhaCentral = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "line"
+  );
+
+  linhaCentral.setAttribute("x1", offsetX);
+  linhaCentral.setAttribute("y1", linhaCentralY);
+  linhaCentral.setAttribute("x2", offsetX + larguraBauPixels);
+  linhaCentral.setAttribute("y2", linhaCentralY);
+  linhaCentral.setAttribute("stroke", "#64748b");
+  linhaCentral.setAttribute("stroke-width", "1.5");
+  linhaCentral.setAttribute("stroke-dasharray", "8,6");
+  linhaCentral.setAttribute("opacity", "0.75");
+  linhaCentral.setAttribute("pointer-events", "none");
+
+  const tituloLinhaCentral = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "title"
+  );
+
+  tituloLinhaCentral.textContent =
+    "Linha central da largura útil do veículo";
+
+  linhaCentral.appendChild(tituloLinhaCentral);
+
+  svgCima.appendChild(linhaCentral);
+}
+
+// =====================================================
+// DESENHO DAS CAIXAS NO MAPA
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// só desenha os retângulos e textos das caixas já
+// posicionadas, não participa de nenhum cálculo de
+// peso, encaixe ou centro de gravidade.
+// =====================================================
+
+function desenharCaixasNoMapa(svgCima, caixasPosicionadas, veiculo, offsetX, offsetY, escalaGlobalX, escalaGlobalY) {
+  caixasPosicionadas.forEach((c) => {
+    let posX = offsetX + c.X_Fisico * escalaGlobalX;
+    let posY = offsetY + c.Y_Fisico * escalaGlobalY;
+    let widthPX = c.compRender * escalaGlobalX;
+    let heightPX = c.largRender * escalaGlobalY;
+
+    let rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", posX);
+    rect.setAttribute("y", posY);
+    rect.setAttribute("width", widthPX);
+    rect.setAttribute("height", heightPX);
+    rect.setAttribute("fill", c.cor);
+    rect.setAttribute("stroke", "#1f2937");
+    rect.setAttribute("stroke-width", "1.0");
+
+    if (c.X_Fisico + c.compRender > veiculo.compFisico) {
+      rect.setAttribute("stroke", "#dc2626");
+      rect.setAttribute("stroke-width", "2");
+    }
+
+    if (c.excessoAET) {
+  rect.setAttribute("stroke", "#f97316");
+  rect.setAttribute("stroke-width", "3");
+  rect.setAttribute("stroke-dasharray", "8,4");
+}
+
+    svgCima.appendChild(rect);
+
+    if (c.ehPallet) {
+      let textoIdentificador = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "text",
+      );
+      textoIdentificador.setAttribute("x", posX + widthPX / 2);
+      textoIdentificador.setAttribute("y", posY + heightPX / 2 - 2);
+      textoIdentificador.setAttribute("fill", "#ffffff");
+      textoIdentificador.setAttribute("font-size", "9px");
+      textoIdentificador.setAttribute("font-weight", "bold");
+      textoIdentificador.setAttribute("text-anchor", "middle");
+      textoIdentificador.textContent = c.textoTxt;
+      svgCima.appendChild(textoIdentificador);
+
+      if (widthPX > 28 && heightPX > 20) {
+        let textoMedidaPallet = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "text",
+        );
+        textoMedidaPallet.setAttribute("x", posX + widthPX / 2);
+        textoMedidaPallet.setAttribute("y", posY + heightPX / 2 + 8);
+        textoMedidaPallet.setAttribute("fill", "rgba(255,255,255,0.85)");
+        textoMedidaPallet.setAttribute("font-size", "8px");
+        textoMedidaPallet.setAttribute("text-anchor", "middle");
+        textoMedidaPallet.textContent = c.dimTexto;
+        svgCima.appendChild(textoMedidaPallet);
+      }
+    } else {
+      if (widthPX > 24 && heightPX > 18) {
+        let textoMedida = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "text",
+        );
+        let deslocamentoY = c.empilhados > 1 ? -4 : 3;
+
+        textoMedida.setAttribute("x", posX + widthPX / 2);
+        textoMedida.setAttribute("y", posY + heightPX / 2 + deslocamentoY);
+        textoMedida.setAttribute("fill", "#ffffff");
+        textoMedida.setAttribute("font-size", "8.5px");
+        textoMedida.setAttribute("font-weight", "normal");
+        textoMedida.setAttribute("text-anchor", "middle");
+        textoMedida.textContent = c.dimTexto;
+        svgCima.appendChild(textoMedida);
+      }
+
+if (c.empilhados > 1) {
+
+  let textoQtd = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "text",
+  );
+
+  textoQtd.setAttribute(
+    "x",
+    posX + widthPX / 2
+  );
+
+  textoQtd.setAttribute(
+    "y",
+    posY + heightPX / 2 + 7
+  );
+
+  textoQtd.setAttribute(
+    "fill",
+    "#ffffff"
+  );
+
+  textoQtd.setAttribute(
+    "font-size",
+    "9px"
+  );
+
+  textoQtd.setAttribute(
+    "font-weight",
+    "bold"
+  );
+
+  textoQtd.setAttribute(
+    "text-anchor",
+    "middle"
+  );
+
+  const idsDaPilha =
+    Array.isArray(c.unidades)
+      ? new Set(
+          c.unidades.map(
+            (unidade) => unidade.id
+          )
+        )
+      : new Set();
+
+  const pilhaComposta =
+    idsDaPilha.size > 1;
+
+  textoQtd.textContent =
+    pilhaComposta
+      ? `${c.empilhados} ITENS`
+      : `${c.empilhados}x`;
+
+  svgCima.appendChild(textoQtd);
+}
+    }
+  });
+}
+
+// =====================================================
+// EDIÇÃO MANUAL DA ABA "PERSONALIZADO"
+//
+// Permite arrastar cada caixa (mudar de posição) e girar
+// 90° manualmente. As alterações ficam só na aba
+// Personalizado, em memória, até o próximo cálculo —
+// não afetam o mapa "Automático" nem são salvas.
+// =====================================================
+
+function caixasSeSobrepoem(a, b) {
+  const margem = 0.01;
+
+  return (
+    a.X_Fisico < b.X_Fisico + b.compRender - margem &&
+    a.X_Fisico + a.compRender > b.X_Fisico + margem &&
+    a.Y_Fisico < b.Y_Fisico + b.largRender - margem &&
+    a.Y_Fisico + a.largRender > b.Y_Fisico + margem
+  );
+}
+
+function posicaoValidaNoBau(caixa, veiculo) {
+  const margem = 0.01;
+
+  return (
+    caixa.X_Fisico >= -margem &&
+    caixa.Y_Fisico >= -margem &&
+    caixa.X_Fisico + caixa.compRender <= veiculo.compFisico + margem &&
+    caixa.Y_Fisico + caixa.largRender <= veiculo.largFisica + margem
+  );
+}
+
+function posicaoLivre(caixa, todasCaixas, veiculo) {
+  if (!posicaoValidaNoBau(caixa, veiculo)) {
+    return false;
+  }
+
+  return !todasCaixas.some(
+    (outra) =>
+      outra !== caixa &&
+      outra.zona === "veiculo" &&
+      caixasSeSobrepoem(caixa, outra),
+  );
+}
+
+function piscarAvisoCaixa(grupo) {
+  const rect = grupo.querySelector("rect");
+  if (!rect) return;
+
+  const corOriginal = rect.getAttribute("stroke");
+  const larguraOriginal = rect.getAttribute("stroke-width");
+
+  rect.setAttribute("stroke", "#dc2626");
+  rect.setAttribute("stroke-width", "3");
+
+  setTimeout(() => {
+    rect.setAttribute("stroke", corOriginal);
+    rect.setAttribute("stroke-width", larguraOriginal);
+  }, 350);
+}
+
+function desenharCaixaInterativa(grupo, c, escalaGlobalX, escalaGlobalY) {
+  grupo.innerHTML = "";
+
+  const widthPX = c.compRender * escalaGlobalX;
+  const heightPX = c.largRender * escalaGlobalY;
+
+  let rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  rect.setAttribute("x", 0);
+  rect.setAttribute("y", 0);
+  rect.setAttribute("width", widthPX);
+  rect.setAttribute("height", heightPX);
+  rect.setAttribute("fill", c.cor);
+  rect.setAttribute(
+    "stroke",
+    c.zona === "espera" ? "#64748b" : "#1f2937",
+  );
+  rect.setAttribute("stroke-width", "1.0");
+
+  if (c.zona === "espera") {
+    rect.setAttribute("stroke-dasharray", "4,3");
+  }
+
+  grupo.appendChild(rect);
+
+  if (widthPX > 24 && heightPX > 18) {
+    let textoMedida = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "text",
+    );
+
+    textoMedida.setAttribute("x", widthPX / 2);
+    textoMedida.setAttribute(
+      "y",
+      heightPX / 2 + (c.empilhados > 1 ? -4 : 3),
+    );
+    textoMedida.setAttribute("fill", "#ffffff");
+    textoMedida.setAttribute("font-size", "8.5px");
+    textoMedida.setAttribute("text-anchor", "middle");
+    textoMedida.style.pointerEvents = "none";
+    textoMedida.textContent =
+      `${(c.compRender * 100).toFixed(0)}x${(c.largRender * 100).toFixed(0)}`;
+    grupo.appendChild(textoMedida);
+  }
+
+  if (c.empilhados > 1) {
+    let textoQtd = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "text",
+    );
+
+    textoQtd.setAttribute("x", widthPX / 2);
+    textoQtd.setAttribute("y", heightPX / 2 + 7);
+    textoQtd.setAttribute("fill", "#ffffff");
+    textoQtd.setAttribute("font-size", "9px");
+    textoQtd.setAttribute("font-weight", "bold");
+    textoQtd.setAttribute("text-anchor", "middle");
+    textoQtd.style.pointerEvents = "none";
+    textoQtd.textContent = `${c.empilhados}x`;
+    grupo.appendChild(textoQtd);
+  }
+
+  // Botão de girar — o raio se adapta ao tamanho da caixa
+  // na tela, então aparece mesmo em caixas finas e compridas
+  // (que são justamente as que mais se beneficiam de girar).
+  const raioBotao = Math.min(7, widthPX / 2 - 1, heightPX / 2 - 1);
+
+  if (raioBotao >= 4) {
+    let botaoGirar = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "circle",
+    );
+
+    botaoGirar.setAttribute("cx", widthPX - raioBotao - 1);
+    botaoGirar.setAttribute("cy", raioBotao + 1);
+    botaoGirar.setAttribute("r", raioBotao);
+    botaoGirar.setAttribute("fill", "#ffffff");
+    botaoGirar.setAttribute("stroke", "#1f2937");
+    botaoGirar.setAttribute("stroke-width", "1");
+    botaoGirar.style.cursor = "pointer";
+    botaoGirar.classList.add("botao-girar-caixa");
+    grupo.appendChild(botaoGirar);
+
+    if (raioBotao >= 6) {
+      let iconeGirar = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "text",
+      );
+
+      iconeGirar.setAttribute("x", widthPX - raioBotao - 1);
+      iconeGirar.setAttribute("y", raioBotao + 3);
+      iconeGirar.setAttribute("text-anchor", "middle");
+      iconeGirar.setAttribute("font-size", "9px");
+      iconeGirar.style.pointerEvents = "none";
+      iconeGirar.textContent = "⟳";
+      grupo.appendChild(iconeGirar);
+    }
+  }
+}
+
+function reorganizarEspera(caixasPosicionadas, areaEspera, escalaGlobalX, escalaGlobalY) {
+  const padding = 8;
+  let cursorX = areaEspera.x + padding;
+  let cursorY = areaEspera.y + padding;
+  let maiorAlturaLinha = 0;
+
+  caixasPosicionadas
+    .filter((c) => c.zona === "espera")
+    .forEach((c) => {
+      const widthPX = c.compRender * escalaGlobalX;
+      const heightPX = c.largRender * escalaGlobalY;
+
+      if (
+        cursorX + widthPX > areaEspera.x + areaEspera.largura &&
+        cursorX > areaEspera.x + padding
+      ) {
+        cursorX = areaEspera.x + padding;
+        cursorY += maiorAlturaLinha + padding;
+        maiorAlturaLinha = 0;
+      }
+
+      c.pxX = cursorX;
+      c.pxY = cursorY;
+
+      cursorX += widthPX + padding;
+      maiorAlturaLinha = Math.max(maiorAlturaLinha, heightPX);
+
+      if (typeof c.atualizarPosicaoTela === "function") {
+        c.atualizarPosicaoTela();
+      }
+    });
+}
+
+function salvarEstadoPersonalizado(caixa) {
+  if (
+    !estadoPersonalizadoSalvo ||
+    estadoPersonalizadoSalvo.assinatura !== assinaturaCargaAtual
+  ) {
+    estadoPersonalizadoSalvo = {
+      assinatura: assinaturaCargaAtual,
+      posicoes: {},
+    };
+  }
+
+  estadoPersonalizadoSalvo.posicoes[caixa.id] = {
+    X_Fisico: caixa.X_Fisico,
+    Y_Fisico: caixa.Y_Fisico,
+    compRender: caixa.compRender,
+    largRender: caixa.largRender,
+    zona: caixa.zona,
+  };
+}
+
+// =====================================================
+// AVALIAÇÃO AO VIVO DO ARRANJO MANUAL
+//
+// Recalcula o centro de gravidade real das caixas que estão
+// DENTRO do veículo (as da Área de Espera não contam) e reaproveita
+// as mesmas classificações do cálculo automático, para que o
+// modo Personalizado tenha o mesmo tipo de alerta.
+// =====================================================
+
+function avaliarArranjoPersonalizado(caixas, veiculo, centroZonaEixos) {
+  const noVeiculo = caixas.filter((c) => c.zona === "veiculo");
+  const naEspera = caixas.filter((c) => c.zona === "espera");
+
+  const pesoNoVeiculo = noVeiculo.reduce((t, c) => t + c.pesoBloco, 0);
+  const pesoNaEspera = naEspera.reduce((t, c) => t + c.pesoBloco, 0);
+
+  let cgX = null;
+  let cgY = null;
+  let analiseLongitudinal = null;
+  let mensagemTransversal = null;
+
+  if (pesoNoVeiculo > 0) {
+    let momentoX = 0;
+    let momentoY = 0;
+
+    noVeiculo.forEach((c) => {
+      momentoX += (c.X_Fisico + c.compRender / 2) * c.pesoBloco;
+      momentoY += (c.Y_Fisico + c.largRender / 2) * c.pesoBloco;
+    });
+
+    cgX = momentoX / pesoNoVeiculo;
+    cgY = momentoY / pesoNoVeiculo;
+
+    analiseLongitudinal = calcularAnaliseLongitudinalCg(
+      cgX,
+      centroZonaEixos,
+      veiculo,
+    );
+
+    mensagemTransversal = calcularAnaliseTransversalCg(cgY, veiculo);
+  }
+
+  const nivelLongitudinal = analiseLongitudinal
+    ? analiseLongitudinal.nivelCg
+    : "adequado";
+
+  const nivelTransversal = mensagemTransversal
+    ? mensagemTransversal.nivel
+    : "adequado";
+
+  const orientacao = analiseLongitudinal
+    ? analiseLongitudinal.orientacaoLongitudinalCg
+    : null;
+
+  let nivel = "aprovado";
+
+  if (nivelLongitudinal === "critico" || nivelTransversal === "critico") {
+    nivel = "critico";
+  } else if (naEspera.length > 0) {
+    nivel = "incompleto";
+  } else if (
+    nivelLongitudinal === "atencao" ||
+    nivelTransversal === "atencao" ||
+    orientacao
+  ) {
+    nivel = "atencao";
+  }
+
+  const mensagens = [];
+
+  if (analiseLongitudinal && analiseLongitudinal.ressalvaCg) {
+    mensagens.push(analiseLongitudinal.ressalvaCg.mensagem);
+  } else if (orientacao) {
+    mensagens.push(orientacao.mensagem);
+  }
+
+  if (mensagemTransversal) {
+    mensagens.push(mensagemTransversal.mensagem);
+  }
+
+  const detalhes = [];
+
+  if (cgX !== null) {
+    detalhes.push(
+      `CG longitudinal: ${cgX.toFixed(2)} m (região dos eixos: ${centroZonaEixos.toFixed(2)} m, diferença de ${analiseLongitudinal.diferencaCgEixos.toFixed(2)} m)`,
+    );
+
+    detalhes.push(
+      `CG lateral: ${cgY.toFixed(2)} m (centro do baú: ${(veiculo.largFisica / 2).toFixed(2)} m)`,
+    );
+  }
+
+  detalhes.push(
+    `Peso posicionado no veículo: ${pesoNoVeiculo.toFixed(2).replace(".", ",")} kg`,
+  );
+
+  if (naEspera.length > 0) {
+    detalhes.push(
+      `Na Área de Espera: ${naEspera.length} caixa(s), ${pesoNaEspera.toFixed(2).replace(".", ",")} kg`,
+    );
+  }
+
+  return {
+    nivel,
+    qtdEspera: naEspera.length,
+    cgX,
+    cgY,
+    pesoNoVeiculo,
+    mensagens,
+    detalhes,
+  };
+}
+
+function renderizarAvaliacaoPersonalizada(numero, avaliacao) {
+  const alvo = document.getElementById(`avaliacao-personalizado-${numero}`);
+
+  if (!alvo) return;
+
+  const titulos = {
+    aprovado: "✅ ARRANJO MANUAL APROVADO",
+    atencao: "⚠️ ATENÇÃO À DISTRIBUIÇÃO DA CARGA",
+    critico: "⛔ DISTRIBUIÇÃO CRÍTICA DA CARGA",
+    incompleto: `⏳ ARRANJO INCOMPLETO — ${avaliacao.qtdEspera} caixa(s) na Área de Espera`,
+  };
+
+  const complemento = {
+    aprovado:
+      "Centro de gravidade dentro da faixa adequada e todas as caixas posicionadas no veículo.",
+    atencao: "",
+    critico: "",
+    incompleto:
+      "Posicione todas as caixas dentro do veículo antes de usar este arranjo.",
+  };
+
+  const textoMensagens = [complemento[avaliacao.nivel]]
+    .concat(avaliacao.mensagens)
+    .filter(Boolean)
+    .join(" ");
+
+  alvo.className = `avaliacao-personalizado avaliacao-${avaliacao.nivel}`;
+
+  alvo.innerHTML = `
+    <strong>${titulos[avaliacao.nivel]}</strong>
+    ${textoMensagens ? `<div>${textoMensagens}</div>` : ""}
+    <ul>
+      ${avaliacao.detalhes.map((linha) => `<li>${linha}</li>`).join("")}
+    </ul>
+  `;
+}
+
+function desenharCaixasNoMapaInterativo(
+  svgPersonalizado,
+  caixasPosicionadas,
+  veiculo,
+  offsetX,
+  offsetY,
+  larguraBauPixels,
+  alturaBauPixels,
+  escalaGlobalX,
+  escalaGlobalY,
+  areaEspera,
+  aoAtualizar,
+) {
+  // Posiciona, antes de desenhar, toda caixa que já começa na
+  // área de espera (restaurada de um estado salvo, por exemplo).
+  reorganizarEspera(caixasPosicionadas, areaEspera, escalaGlobalX, escalaGlobalY);
+
+  // Salva o arranjo e reavalia o CG a cada alteração confirmada.
+  const salvarEAvaliar = (caixa) => {
+    salvarEstadoPersonalizado(caixa);
+
+    if (typeof aoAtualizar === "function") {
+      aoAtualizar(caixasPosicionadas);
+    }
+  };
+
+  caixasPosicionadas.forEach((c) => {
+    const grupo = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "g",
+    );
+
+    grupo.style.cursor = "grab";
+    grupo.classList.add("caixa-personalizada");
+
+    const posicaoInicialPx = () =>
+      c.zona === "espera"
+        ? { x: c.pxX, y: c.pxY }
+        : {
+            x: offsetX + c.X_Fisico * escalaGlobalX,
+            y: offsetY + c.Y_Fisico * escalaGlobalY,
+          };
+
+    let pxAtual = posicaoInicialPx();
+
+    const atualizarTransform = () => {
+      grupo.setAttribute(
+        "transform",
+        `translate(${pxAtual.x}, ${pxAtual.y})`,
+      );
+    };
+
+    c.atualizarPosicaoTela = () => {
+      pxAtual = { x: c.pxX, y: c.pxY };
+      atualizarTransform();
+    };
+
+    atualizarTransform();
+    desenharCaixaInterativa(grupo, c, escalaGlobalX, escalaGlobalY);
+    svgPersonalizado.appendChild(grupo);
+
+    let arrastando = false;
+    let inicioPointerX = 0;
+    let inicioPointerY = 0;
+    let pxInicioArraste = { x: 0, y: 0 };
+
+    const girarCaixa = () => {
+      const compAntigo = c.compRender;
+      const largAntigo = c.largRender;
+
+      c.compRender = largAntigo;
+      c.largRender = compAntigo;
+
+      if (c.zona === "veiculo" && !posicaoLivre(c, caixasPosicionadas, veiculo)) {
+        c.compRender = compAntigo;
+        c.largRender = largAntigo;
+        piscarAvisoCaixa(grupo);
+        return;
+      }
+
+      desenharCaixaInterativa(grupo, c, escalaGlobalX, escalaGlobalY);
+
+      if (c.zona === "espera") {
+        reorganizarEspera(caixasPosicionadas, areaEspera, escalaGlobalX, escalaGlobalY);
+      }
+
+      salvarEAvaliar(c);
+    };
+
+    grupo.addEventListener("pointerdown", (evento) => {
+      if (evento.target.closest(".botao-girar-caixa")) {
+        evento.stopPropagation();
+        girarCaixa();
+        return;
+      }
+
+      arrastando = true;
+      grupo.setPointerCapture(evento.pointerId);
+      grupo.style.cursor = "grabbing";
+
+      inicioPointerX = evento.clientX;
+      inicioPointerY = evento.clientY;
+      pxInicioArraste = { x: pxAtual.x, y: pxAtual.y };
+    });
+
+    // Clique duplo (ou toque duplo) gira a caixa não importa
+    // o tamanho dela na tela — não depende do botão aparecer.
+    grupo.addEventListener("dblclick", (evento) => {
+      evento.stopPropagation();
+      girarCaixa();
+    });
+
+    grupo.addEventListener("pointermove", (evento) => {
+      if (!arrastando) return;
+
+      const deltaXPixel = evento.clientX - inicioPointerX;
+      const deltaYPixel = evento.clientY - inicioPointerY;
+
+      pxAtual = {
+        x: pxInicioArraste.x + deltaXPixel,
+        y: pxInicioArraste.y + deltaYPixel,
+      };
+
+      atualizarTransform();
+    });
+
+    const finalizarArraste = () => {
+      if (!arrastando) return;
+
+      arrastando = false;
+      grupo.style.cursor = "grab";
+
+      const widthPX = c.compRender * escalaGlobalX;
+      const heightPX = c.largRender * escalaGlobalY;
+      const centroX = pxAtual.x + widthPX / 2;
+      const centroY = pxAtual.y + heightPX / 2;
+
+      const dentroDoVeiculo =
+        centroX >= offsetX &&
+        centroX <= offsetX + larguraBauPixels &&
+        centroY >= offsetY &&
+        centroY <= offsetY + alturaBauPixels;
+
+      const dentroDaEspera =
+        centroX >= areaEspera.x &&
+        centroX <= areaEspera.x + areaEspera.largura &&
+        centroY >= areaEspera.y &&
+        centroY <= areaEspera.y + areaEspera.altura;
+
+      const reverter = () => {
+        pxAtual = { x: pxInicioArraste.x, y: pxInicioArraste.y };
+        atualizarTransform();
+        piscarAvisoCaixa(grupo);
+      };
+
+      if (dentroDoVeiculo) {
+        const novoXFisico = (pxAtual.x - offsetX) / escalaGlobalX;
+        const novoYFisico = (pxAtual.y - offsetY) / escalaGlobalY;
+
+        const zonaAntiga = c.zona;
+        c.zona = "veiculo";
+        c.X_Fisico = novoXFisico;
+        c.Y_Fisico = novoYFisico;
+
+        if (!posicaoLivre(c, caixasPosicionadas, veiculo)) {
+          c.zona = zonaAntiga;
+          reverter();
+
+          if (zonaAntiga === "espera") {
+            reorganizarEspera(caixasPosicionadas, areaEspera, escalaGlobalX, escalaGlobalY);
+          }
+
+          return;
+        }
+
+        if (zonaAntiga === "espera") {
+          reorganizarEspera(caixasPosicionadas, areaEspera, escalaGlobalX, escalaGlobalY);
+        }
+
+        salvarEAvaliar(c);
+        return;
+      }
+
+      if (dentroDaEspera) {
+        c.zona = "espera";
+        reorganizarEspera(caixasPosicionadas, areaEspera, escalaGlobalX, escalaGlobalY);
+        salvarEAvaliar(c);
+        return;
+      }
+
+      // Soltou fora das duas áreas — volta pro lugar de antes.
+      reverter();
+    };
+
+    grupo.addEventListener("pointerup", finalizarArraste);
+    grupo.addEventListener("pointercancel", finalizarArraste);
+  });
+}
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// só desenha os pontos de CG/centro do veículo e o
+// painel de texto, não participa de nenhum cálculo.
+// =====================================================
+
+function desenharPainelComparacaoCG(svgCima, pesoTotalBlocos, centroGravidadeX, centroGravidadeY, veiculo, offsetX, offsetY, alturaBauPixels, larguraBauPixels, escalaGlobalX, escalaGlobalY) {
+  if (pesoTotalBlocos > 0) {
+    const cgPixelX =
+      offsetX + centroGravidadeX * escalaGlobalX;
+
+    const cgPixelY =
+      offsetY + centroGravidadeY * escalaGlobalY;
+
+    const centroVeiculoPixelX =
+      offsetX + (veiculo.compFisico / 2) * escalaGlobalX;
+
+    const centroVeiculoPixelY =
+      offsetY + (veiculo.largFisica / 2) * escalaGlobalY;
+
+    const grupoComparacao = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "g"
+    );
+
+    grupoComparacao.setAttribute(
+      "class",
+      "comparacao-centro-gravidade"
+    );
+
+    const linhaDeslocamento = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "line"
+    );
+
+    linhaDeslocamento.setAttribute("x1", centroVeiculoPixelX);
+    linhaDeslocamento.setAttribute("y1", centroVeiculoPixelY);
+    linhaDeslocamento.setAttribute("x2", cgPixelX);
+    linhaDeslocamento.setAttribute("y2", cgPixelY);
+    linhaDeslocamento.setAttribute("stroke", "#64748b");
+    linhaDeslocamento.setAttribute("stroke-width", "1.5");
+    linhaDeslocamento.setAttribute("stroke-dasharray", "4 4");
+    linhaDeslocamento.setAttribute("opacity", "0.7");
+
+    grupoComparacao.appendChild(linhaDeslocamento);
+
+    const pontoCentroVeiculo = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "circle"
+    );
+
+    pontoCentroVeiculo.setAttribute("cx", centroVeiculoPixelX);
+    pontoCentroVeiculo.setAttribute("cy", centroVeiculoPixelY);
+    pontoCentroVeiculo.setAttribute("r", "4");
+    pontoCentroVeiculo.setAttribute("fill", "#2563eb");
+    pontoCentroVeiculo.setAttribute("stroke", "#ffffff");
+    pontoCentroVeiculo.setAttribute("stroke-width", "1.5");
+
+    grupoComparacao.appendChild(pontoCentroVeiculo);
+
+    const tituloCentroVeiculo = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "title"
+    );
+
+    tituloCentroVeiculo.textContent =
+      `Centro geométrico do veículo: ` +
+      `X ${(veiculo.compFisico / 2).toFixed(2)} m | ` +
+      `Y ${(veiculo.largFisica / 2).toFixed(2)} m`;
+
+    pontoCentroVeiculo.appendChild(tituloCentroVeiculo);
+
+    const pontoCG = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "circle"
+    );
+
+    pontoCG.setAttribute("cx", cgPixelX);
+    pontoCG.setAttribute("cy", cgPixelY);
+    pontoCG.setAttribute("r", "4");
+    pontoCG.setAttribute("fill", "#dc2626");
+    pontoCG.setAttribute("stroke", "#ffffff");
+    pontoCG.setAttribute("stroke-width", "1.5");
+
+    grupoComparacao.appendChild(pontoCG);
+
+    const tituloCG = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "title"
+    );
+
+    tituloCG.textContent =
+      `Centro de gravidade da carga: ` +
+      `X ${centroGravidadeX.toFixed(2)} m | ` +
+      `Y ${centroGravidadeY.toFixed(2)} m`;
+
+    pontoCG.appendChild(tituloCG);
+
+    const painelX = offsetX;
+    const painelY = offsetY + alturaBauPixels + 22;
+    const painelLargura = Math.max(larguraBauPixels, 260);
+    const painelAltura = 48;
+
+    const fundoPainel = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "rect"
+    );
+
+    fundoPainel.setAttribute("x", painelX);
+    fundoPainel.setAttribute("y", painelY);
+    fundoPainel.setAttribute("width", painelLargura);
+    fundoPainel.setAttribute("height", painelAltura);
+    fundoPainel.setAttribute("rx", "7");
+    fundoPainel.setAttribute("fill", "#f8fafc");
+    fundoPainel.setAttribute("stroke", "#cbd5e1");
+    fundoPainel.setAttribute("stroke-width", "1");
+
+    grupoComparacao.appendChild(fundoPainel);
+
+    const linhaGuiaCG = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "line"
+    );
+
+    linhaGuiaCG.setAttribute("x1", cgPixelX);
+    linhaGuiaCG.setAttribute("y1", cgPixelY + 6);
+    linhaGuiaCG.setAttribute("x2", cgPixelX);
+    linhaGuiaCG.setAttribute("y2", painelY);
+    linhaGuiaCG.setAttribute("stroke", "#dc2626");
+    linhaGuiaCG.setAttribute("stroke-width", "1.5");
+    linhaGuiaCG.setAttribute("stroke-dasharray", "3 3");
+    linhaGuiaCG.setAttribute("opacity", "0.7");
+
+    grupoComparacao.appendChild(linhaGuiaCG);
+
+    const textoCentroVeiculo = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "text"
+    );
+
+    textoCentroVeiculo.setAttribute("x", painelX + 12);
+    textoCentroVeiculo.setAttribute("y", painelY + 19);
+    textoCentroVeiculo.setAttribute("font-size", "10");
+    textoCentroVeiculo.setAttribute("font-weight", "700");
+    textoCentroVeiculo.setAttribute("fill", "#2563eb");
+
+    textoCentroVeiculo.textContent =
+      `● Centro do veículo: X ${(veiculo.compFisico / 2).toFixed(2)} m | ` +
+      `Y ${(veiculo.largFisica / 2).toFixed(2)} m`;
+
+    grupoComparacao.appendChild(textoCentroVeiculo);
+
+    const textoCG = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "text"
+    );
+
+    textoCG.setAttribute("x", painelX + 12);
+    textoCG.setAttribute("y", painelY + 37);
+    textoCG.setAttribute("font-size", "10");
+    textoCG.setAttribute("font-weight", "700");
+    textoCG.setAttribute("fill", "#dc2626");
+
+    textoCG.textContent =
+      `● CG da carga: X ${centroGravidadeX.toFixed(2)} m | ` +
+      `Y ${centroGravidadeY.toFixed(2)} m`;
+
+    grupoComparacao.appendChild(textoCG);
+
+    svgCima.appendChild(grupoComparacao);
+  }
+}
+
+// =====================================================
+// C4 - ANÁLISE TRANSVERSAL / LATERAL + CLASSIFICAÇÃO
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// calcula o desvio lateral do CG em relação ao centro
+// do veículo e classifica o nível de atenção operacional.
+// Retorna a mensagem de alerta (ou null se estiver adequado).
+// =====================================================
+
+function calcularAnaliseTransversalCg(centroGravidadeY, veiculo) {
+  const centroLateralVeiculo =
+    veiculo.largFisica / 2;
+
+  const desvioLateralMetros =
+    centroGravidadeY - centroLateralVeiculo;
+
+  const desvioLateralAbsoluto =
+    Math.abs(desvioLateralMetros);
+
+  const meiaLarguraUtil =
+    veiculo.largFisica / 2;
+
+  const desvioLateralPercentual =
+    meiaLarguraUtil > 0
+      ? (desvioLateralAbsoluto / meiaLarguraUtil) * 100
+      : 0;
+
+  let ladoDesvioLateral = "CENTRAL";
+
+  // Orientação do mapa: a frente (cavalo) fica à ESQUERDA do desenho e o início
+  // do piso (Y = 0) fica no TOPO. Visto de cima com a frente apontando para a
+  // esquerda, o topo é o lado DIREITO do veículo e a base é o lado ESQUERDO
+  // (lado do motorista). Y menor que o centro = peso para o lado direito.
+  if (desvioLateralMetros < -0.01) {
+    ladoDesvioLateral = "DIREITA";
+  } else if (desvioLateralMetros > 0.01) {
+    ladoDesvioLateral = "ESQUERDA";
+  }
+
+  let nivelTransversalCg = "";
+  let classificacaoTransversalCg = "";
+
+  if (desvioLateralPercentual <= 10) {
+    nivelTransversalCg = "adequado";
+    classificacaoTransversalCg =
+      "ADEQUADO - distribuição lateral próxima do centro";
+  } else if (desvioLateralPercentual <= 25) {
+    nivelTransversalCg = "atencao";
+    classificacaoTransversalCg =
+      "ATENÇÃO - concentração lateral afastada da região central";
+  } else {
+    nivelTransversalCg = "critico";
+    classificacaoTransversalCg =
+      "CRÍTICO - concentração lateral significativamente afastada da região central";
+  }
+
+  let mensagemTransversalCg = null;
+
+  if (nivelTransversalCg === "atencao") {
+    mensagemTransversalCg = {
+      nivel: "atencao",
+      titulo: "ATENÇÃO À DISTRIBUIÇÃO LATERAL DA CARGA",
+      mensagem:
+        `A distribuição estimada da carga apresenta concentração lateral para o lado ${ladoDesvioLateral === "ESQUERDA" ? "esquerdo" : "direito"}. ` +
+        "Recomenda-se revisar o posicionamento da carga antes da operação.",
+    };
+  } else if (nivelTransversalCg === "critico") {
+    mensagemTransversalCg = {
+      nivel: "critico",
+      titulo: "DISTRIBUIÇÃO LATERAL CRÍTICA DA CARGA",
+      mensagem:
+        `A distribuição estimada da carga apresenta concentração lateral significativa para o lado ${ladoDesvioLateral === "ESQUERDA" ? "esquerdo" : "direito"}. ` +
+        "Recomenda-se revisar a disposição da carga antes de prosseguir.",
+    };
+  }
+
+  return mensagemTransversalCg;
+}
+
+// =====================================================
+// C3/C4 - CLASSIFICAÇÃO E ORIENTAÇÃO LONGITUDINAL DO CG
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// classifica o CG em relação à região dos eixos e à
+// posição longitudinal no veículo, e monta as mensagens
+// de orientação/ressalva operacional correspondentes.
+// =====================================================
+
+function calcularAnaliseLongitudinalCg(centroGravidadeX, centroZonaEixos, veiculo) {
+  const diferencaCgEixos =
+    Math.abs(
+      centroGravidadeX - centroZonaEixos,
+    );
+
+  let classificacaoCg = "";
+  let nivelCg = "";
+
+  if (diferencaCgEixos <= 0.5) {
+    classificacaoCg =
+      "ADEQUADO - CG próximo da região dos eixos";
+
+    nivelCg = "adequado";
+  } else if (diferencaCgEixos <= 1) {
+    classificacaoCg =
+      "ATENÇÃO - CG afastado da região ideal";
+
+    nivelCg = "atencao";
+  } else {
+    classificacaoCg =
+      "CRÍTICO - revisar distribuição da carga";
+
+    nivelCg = "critico";
+  }
+
+  const percentualPosicaoCg =
+    (centroGravidadeX / veiculo.compFisico) * 100;
+
+  let regiaoLongitudinalCg = "";
+  let tendenciaLongitudinalCg = "";
+
+  if (percentualPosicaoCg < 33.33) {
+    regiaoLongitudinalCg = "DIANTEIRA";
+    tendenciaLongitudinalCg =
+      "Concentração de peso com tendência para a região dianteira";
+  } else if (percentualPosicaoCg <= 66.66) {
+    regiaoLongitudinalCg = "CENTRAL";
+    tendenciaLongitudinalCg =
+      "Concentração de peso predominantemente na região central";
+  } else {
+    regiaoLongitudinalCg = "TRASEIRA";
+    tendenciaLongitudinalCg =
+      "Concentração de peso com tendência para a região traseira";
+  }
+
+  let orientacaoLongitudinalCg = null;
+
+  if (regiaoLongitudinalCg === "DIANTEIRA") {
+    orientacaoLongitudinalCg = {
+      regiao: "dianteira",
+      titulo: "CONCENTRAÇÃO LONGITUDINAL DIANTEIRA",
+      mensagem:
+        "A distribuição estimada apresenta maior concentração de peso na região dianteira do espaço útil. Recomenda-se verificar o posicionamento da carga antes da operação.",
+    };
+  } else if (regiaoLongitudinalCg === "TRASEIRA") {
+    orientacaoLongitudinalCg = {
+      regiao: "traseira",
+      titulo: "CONCENTRAÇÃO LONGITUDINAL TRASEIRA",
+      mensagem:
+        "A distribuição estimada apresenta maior concentração de peso na região traseira do espaço útil. Recomenda-se verificar o posicionamento da carga antes da operação.",
+    };
+  }
+
+  let ressalvaCg = null;
+
+  if (nivelCg === "atencao") {
+    ressalvaCg = {
+      nivel: "atencao",
+
+      titulo:
+        "ATENÇÃO À DISTRIBUIÇÃO DA CARGA",
+
+      mensagem:
+        "O centro de gravidade estimado ficou afastado da região ideal. Revise o posicionamento da carga antes da operação.",
+    };
+  } else if (nivelCg === "critico") {
+    ressalvaCg = {
+      nivel: "critico",
+
+      titulo:
+        "DISTRIBUIÇÃO CRÍTICA DA CARGA",
+
+      mensagem:
+        "O centro de gravidade estimado ficou significativamente afastado da região ideal. Recomenda-se revisar a disposição da carga antes de prosseguir.",
+    };
+  }
+
+  return {
+    diferencaCgEixos,
+    nivelCg,
+    classificacaoCg,
+    orientacaoLongitudinalCg,
+    ressalvaCg,
+  };
+}
+
+// =====================================================
+// PILHAS FÍSICAS COMPOSTAS
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// monta a lista de "caixas individuais" (incluindo
+// pilhas empilhadas) a partir dos itens cadastrados.
+// Não decide POSIÇÃO nenhuma, só monta a lista.
+// =====================================================
+
+function montarCaixasIndividuais(itens, veiculo) {
+  let caixasIndividuais = [];
+
+  const gruposEmpilhamento =
+    agruparItensParaEmpilhamento(itens);
+
+  gruposEmpilhamento.forEach((grupo) => {
+
+    if (grupo.ehPalletOuBase) {
+
+      grupo.unidades.forEach((unidade) => {
+
+        const nomeMinusculo =
+          String(unidade.nome || "").toLowerCase();
+
+        let textoInterno = "";
+
+        if (
+          nomeMinusculo.includes("pallet") ||
+          nomeMinusculo.includes("palete")
+        ) {
+          textoInterno = "PALETE";
+        }
+
+        if (nomeMinusculo.includes("base")) {
+          textoInterno = "BASE";
+        }
+
+        caixasIndividuais.push({
+          id: unidade.id,
+          crachaId: unidade.crachaId,
+          nome: unidade.nome,
+
+          comp: grupo.comp,
+          larg: grupo.larg,
+
+          cor: unidade.cor,
+
+          ehPallet: true,
+          textoTxt: textoInterno,
+
+          empilhados: 1,
+
+          pesoUnitario: unidade.peso,
+          pesoBloco: unidade.peso,
+
+          alturaTotal: unidade.alt,
+
+          unidades: [
+            {
+              ...unidade,
+            },
+          ],
+
+          dimTexto:
+            `${grupo.comp.toFixed(2)}x${grupo.larg.toFixed(2)}`,
+
+          area:
+            grupo.comp * grupo.larg,
+        });
+      });
+
+      return;
+    }
+
+    const unidades =
+      [...grupo.unidades].sort(
+        (a, b) =>
+          b.alt - a.alt ||
+          b.peso - a.peso
+      );
+
+    const pilhas = [];
+
+    unidades.forEach((unidade) => {
+
+      let pilhaEncontrada = null;
+
+      for (const pilha of pilhas) {
+
+        const possuiItemAlto =
+          unidade.alt > 0.8 ||
+          pilha.unidades.some(
+            (u) => u.alt > 0.8
+          );
+
+        const limiteQuantidade =
+          possuiItemAlto ? 2 : 3;
+
+        const novaAltura =
+          pilha.alturaTotal +
+          unidade.alt;
+
+        const cabePorQuantidade =
+          pilha.unidades.length <
+          limiteQuantidade;
+
+        const cabePorAltura =
+          novaAltura <=
+          veiculo.altFisica + 0.001;
+
+        if (
+          cabePorQuantidade &&
+          cabePorAltura
+        ) {
+          pilhaEncontrada = pilha;
+          break;
+        }
+      }
+
+      if (pilhaEncontrada) {
+
+        pilhaEncontrada.unidades.push(
+          unidade
+        );
+
+        pilhaEncontrada.alturaTotal +=
+          unidade.alt;
+
+      } else {
+
+        pilhas.push({
+          alturaTotal: unidade.alt,
+          unidades: [unidade],
+        });
+      }
+    });
+
+    pilhas.forEach((pilha) => {
+
+      pilha.unidades.sort(
+        (a, b) => b.peso - a.peso
+      );
+
+      const pesoBloco =
+        pilha.unidades.reduce(
+          (total, unidade) =>
+            total + unidade.peso,
+          0
+        );
+
+      const unidadeReferencia =
+        pilha.unidades[0];
+
+      const nomesPilha =
+        pilha.unidades
+          .map((unidade) => unidade.nome)
+          .join(" + ");
+
+      caixasIndividuais.push({
+        id: unidadeReferencia.id,
+        crachaId: unidadeReferencia.crachaId,
+
+        nome:
+          pilha.unidades.length > 1
+            ? nomesPilha
+            : unidadeReferencia.nome,
+
+        comp: grupo.comp,
+        larg: grupo.larg,
+
+        cor: unidadeReferencia.cor,
+
+        ehPallet: false,
+        textoTxt: "",
+
+        empilhados:
+          pilha.unidades.length,
+
+        pesoUnitario:
+          unidadeReferencia.peso,
+
+        pesoBloco,
+
+        alturaTotal:
+          pilha.alturaTotal,
+
+        unidades:
+          pilha.unidades.map(
+            (unidade) => ({
+              ...unidade,
+            })
+          ),
+
+        dimTexto:
+          `${grupo.comp.toFixed(2)}x${grupo.larg.toFixed(2)}`,
+
+        area:
+          grupo.comp * grupo.larg,
+      });
+    });
+  });
+
+  caixasIndividuais.sort((a, b) => {
+    const pesoA = (a.peso || 0) * (a.quantidadeEmpilhada || 1);
+    const pesoB = (b.peso || 0) * (b.quantidadeEmpilhada || 1);
+
+    return (
+      pesoB - pesoA ||
+      b.comp - a.comp ||
+      b.area - a.area
+    );
+  });
+
+  return caixasIndividuais;
+}
+
+// =====================================================
+// TENTATIVA DE ARRUMAÇÃO COMPACTA (FALLBACK FÍSICO)
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// tentativa alternativa de encaixe quando a distribuição
+// por peso não encontra posição. Usa espaço próprio,
+// não mexe nos espaços livres do encaixe principal.
+// =====================================================
+
+function tentarArrumacaoCompacta(caixasOriginais, veiculo, centroZonaEixos) {
+  const caixasTeste = caixasOriginais
+    .map((caixa) => ({ ...caixa }))
+    .sort(
+      (a, b) =>
+        b.comp - a.comp ||
+        b.area - a.area,
+    );
+
+  let espacosFallback = [
+    {
+      x: 0,
+      y: 0,
+      comp: veiculo.compFisico,
+      larg: veiculo.largFisica,
+    },
+  ];
+
+  const posicionadasFallback = [];
+
+  for (const caixa of caixasTeste) {
+    let encaixou = false;
+
+    for (let i = 0; i < espacosFallback.length; i++) {
+      const espaco = espacosFallback[i];
+
+      // Sem giro automático: só a orientação informada pelo usuário.
+      const orientacoesFallback = [
+  {
+    comp: caixa.comp,
+    larg: caixa.larg,
+    girado: false,
+  },
+];
+
+      for (const orientacao of orientacoesFallback) {
+        const cabe =
+          orientacao.comp <= espaco.comp + 0.01 &&
+          orientacao.larg <= espaco.larg + 0.01;
+
+        if (!cabe) {
+          continue;
+        }
+
+        caixa.X_Fisico = espaco.x;
+        caixa.Y_Fisico = espaco.y;
+
+        caixa.compRender = orientacao.comp;
+        caixa.largRender = orientacao.larg;
+        caixa.girado = orientacao.girado;
+
+        const espacoDireita = {
+          x: espaco.x + orientacao.comp,
+          y: espaco.y,
+          comp: espaco.comp - orientacao.comp,
+          larg: espaco.larg,
+        };
+
+        const espacoCima = {
+          x: espaco.x,
+          y: espaco.y + orientacao.larg,
+          comp: orientacao.comp,
+          larg: espaco.larg - orientacao.larg,
+        };
+
+        espacosFallback.splice(i, 1);
+
+        if (
+          espacoDireita.comp > 0.01 &&
+          espacoDireita.larg > 0.01
+        ) {
+          espacosFallback.push(espacoDireita);
+        }
+
+        if (
+          espacoCima.comp > 0.01 &&
+          espacoCima.larg > 0.01
+        ) {
+          espacosFallback.push(espacoCima);
+        }
+
+        espacosFallback.sort(
+          (a, b) =>
+            a.x - b.x ||
+            a.y - b.y,
+        );
+
+        posicionadasFallback.push(caixa);
+
+        encaixou = true;
+        break;
+      }
+
+      if (encaixou) {
+        break;
+      }
+    }
+
+    if (!encaixou) {
+      return null;
+    }
+  }
+
+  const menorXFallback = Math.min(
+    ...posicionadasFallback.map(
+      (caixa) => caixa.X_Fisico,
+    ),
+  );
+
+  const maiorXFallback = Math.max(
+    ...posicionadasFallback.map(
+      (caixa) =>
+        caixa.X_Fisico + caixa.compRender,
+    ),
+  );
+
+  const comprimentoOcupadoFallback =
+    maiorXFallback - menorXFallback;
+
+  const deslocamentoPrevistoX =
+    (veiculo.compFisico - comprimentoOcupadoFallback) / 2 -
+    menorXFallback;
+
+  const gruposPorDimensao = {};
+
+  posicionadasFallback.forEach((caixa) => {
+    const chave =
+      `${caixa.compRender.toFixed(4)}|${caixa.largRender.toFixed(4)}`;
+
+    if (!gruposPorDimensao[chave]) {
+      gruposPorDimensao[chave] = [];
+    }
+
+    gruposPorDimensao[chave].push(caixa);
+  });
+
+  Object.values(gruposPorDimensao).forEach((grupo) => {
+    if (grupo.length < 2) {
+      return;
+    }
+
+    const posicoes = grupo
+      .map((caixa) => ({
+        x: caixa.X_Fisico,
+        y: caixa.Y_Fisico,
+        comp: caixa.compRender,
+        larg: caixa.largRender,
+      }))
+      .sort((a, b) => {
+        const centroA =
+          a.x +
+          deslocamentoPrevistoX +
+          a.comp / 2;
+
+        const centroB =
+          b.x +
+          deslocamentoPrevistoX +
+          b.comp / 2;
+
+        return (
+          Math.abs(centroA - centroZonaEixos) -
+          Math.abs(centroB - centroZonaEixos)
+        );
+      });
+
+    const caixasOrdenadas = [...grupo].sort(
+      (a, b) =>
+        b.pesoBloco - a.pesoBloco,
+    );
+
+    caixasOrdenadas.forEach((caixa, index) => {
+      const posicao = posicoes[index];
+
+      caixa.X_Fisico = posicao.x;
+      caixa.Y_Fisico = posicao.y;
+      caixa.compRender = posicao.comp;
+      caixa.largRender = posicao.larg;
+    });
+  });
+
+  return posicionadasFallback;
+}
+
+// =====================================================
+// C3 - CLASSIFICAÇÃO DE PESO E REGIÃO ESTIMADA DOS EIXOS
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// marca cada caixa como pesada/leve, ordena a lista
+// (pesadas primeiro) e devolve o centro da zona dos
+// eixos, usado depois no ajuste de centro de gravidade.
+// =====================================================
+
+function classificarCaixasPorPeso(caixasIndividuais, veiculo) {
+  const limiteCargaPesada = Math.max(
+    1000,
+    veiculo.pesoMax * 0.1
+  );
+
+  const inicioZonaEixos = veiculo.compFisico * 0.55;
+  const fimZonaEixos = veiculo.compFisico * 0.7;
+  const centroZonaEixos =
+    (inicioZonaEixos + fimZonaEixos) / 2;
+
+  caixasIndividuais.forEach((caixa) => {
+    caixa.ehCargaPesada =
+      caixa.pesoBloco >= limiteCargaPesada;
+  });
+
+  caixasIndividuais.sort((a, b) => {
+    if (a.ehCargaPesada !== b.ehCargaPesada) {
+      return a.ehCargaPesada ? -1 : 1;
+    }
+
+    return (
+      b.pesoBloco - a.pesoBloco ||
+      b.area - a.area ||
+      b.comp - a.comp
+    );
+  });
+
+  return { inicioZonaEixos, fimZonaEixos, centroZonaEixos };
+}
+
+// =====================================================
+// POSICIONAMENTO DAS CAIXAS NO ESPAÇO DISPONÍVEL
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// é o "coração" do encaixe físico: decide onde cada
+// caixa vai, testando espaços livres e escolhendo a
+// melhor posição por pontuação.
+//
+// Inclui também o fix do balanceamento lateral
+// preditivo (cargas leves), que tinha sido combinado
+// antes mas nunca chegou a ser aplicado de fato —
+// ver a linha "pontuacao = desvioCgLateralProjetado..."
+// marcada abaixo.
+// =====================================================
+
+
+/*
+  Remove a área ocupada de todos os espaços livres.
+
+  Isso evita espaços sobrepostos e impede que duas cargas
+  sejam posicionadas fisicamente na mesma região.
+*/
+function removerAreaOcupada(espaçosLivres, areaOcupada) {
+  const novosEspacos = [];
+
+  espaçosLivres.forEach((espaco) => {
+    const inicioIntersecaoX = Math.max(
+      espaco.x,
+      areaOcupada.x,
+    );
+
+    const fimIntersecaoX = Math.min(
+      espaco.x + espaco.comp,
+      areaOcupada.x + areaOcupada.comp,
+    );
+
+    const inicioIntersecaoY = Math.max(
+      espaco.y,
+      areaOcupada.y,
+    );
+
+    const fimIntersecaoY = Math.min(
+      espaco.y + espaco.larg,
+      areaOcupada.y + areaOcupada.larg,
+    );
+
+    const existeIntersecao =
+      fimIntersecaoX > inicioIntersecaoX + 0.01 &&
+      fimIntersecaoY > inicioIntersecaoY + 0.01;
+
+    if (!existeIntersecao) {
+      novosEspacos.push(espaco);
+      return;
+    }
+
+    const espacoEsquerda = {
+      x: espaco.x,
+      y: espaco.y,
+      comp: inicioIntersecaoX - espaco.x,
+      larg: espaco.larg,
+    };
+
+    const espacoDireita = {
+      x: fimIntersecaoX,
+      y: espaco.y,
+      comp:
+        espaco.x +
+        espaco.comp -
+        fimIntersecaoX,
+      larg: espaco.larg,
+    };
+
+    const espacoAbaixo = {
+      x: inicioIntersecaoX,
+      y: espaco.y,
+      comp:
+        fimIntersecaoX -
+        inicioIntersecaoX,
+      larg:
+        inicioIntersecaoY -
+        espaco.y,
+    };
+
+    const espacoAcima = {
+      x: inicioIntersecaoX,
+      y: fimIntersecaoY,
+      comp:
+        fimIntersecaoX -
+        inicioIntersecaoX,
+      larg:
+        espaco.y +
+        espaco.larg -
+        fimIntersecaoY,
+    };
+
+    [
+      espacoEsquerda,
+      espacoDireita,
+      espacoAbaixo,
+      espacoAcima,
+    ].forEach((novoEspaco) => {
+      if (
+        novoEspaco.comp > 0.01 &&
+        novoEspaco.larg > 0.01
+      ) {
+        novosEspacos.push(novoEspaco);
+      }
+    });
+  });
+
+  return novosEspacos;
+}
+
+function posicionarCaixasNoEspaco(caixasIndividuais, veiculo, centroZonaEixos, espaçosLivres, caixasPosicionadas) {
+  const caixasProcessadasEmGrupo = new Set();
+
+  caixasIndividuais.forEach((caixa, indiceCaixa) => {
+
+    // Se esta caixa já foi posicionada junto com outra
+    // unidade igual, não processa novamente.
+    if (caixasProcessadasEmGrupo.has(caixa)) {
+      return;
+    }
+
+    // =====================================================
+    // C4 - AGRUPAMENTO TRANSVERSAL PRÉVIO
+    //
+    // Para cargas leves iguais, tenta posicionar duas
+    // unidades juntas transversalmente:
+    //
+    // [ B ]
+    // [ B ]
+    //
+    // A orientação original informada pelo usuário
+    // é preservada. Nenhuma rotação automática é feita.
+    // =====================================================
+
+    const caixaParceira =
+      caixasIndividuais.find(
+        (outraCaixa, indiceOutra) =>
+          indiceOutra !== indiceCaixa &&
+          !caixasProcessadasEmGrupo.has(outraCaixa) &&
+          outraCaixa.id === caixa.id &&
+          !caixa.ehCargaPesada &&
+          !outraCaixa.ehCargaPesada &&
+          Math.abs(outraCaixa.comp - caixa.comp) <= 0.01 &&
+          Math.abs(outraCaixa.larg - caixa.larg) <= 0.01
+      );
+
+    if (caixaParceira) {
+
+      const compGrupo = caixa.comp;
+
+      const largGrupo =
+        caixa.larg +
+        caixaParceira.larg;
+
+      let melhorPosicaoGrupo = null;
+
+      espaçosLivres.forEach((espaco) => {
+
+        const grupoCabe =
+          compGrupo <= espaco.comp + 0.01 &&
+          largGrupo <= espaco.larg + 0.01;
+
+        if (!grupoCabe) {
+          return;
+        }
+
+        const posicaoXGrupo = espaco.x;
+        const posicaoYGrupo = espaco.y;
+
+        // ---------------------------------------------
+        // Calcula o CG lateral existente
+        // ---------------------------------------------
+
+        let pesoJaPosicionado = 0;
+        let momentoLateralAtual = 0;
+
+        caixasPosicionadas.forEach((caixaPosicionada) => {
+
+          const centroY =
+            caixaPosicionada.Y_Fisico +
+            caixaPosicionada.largRender / 2;
+
+          pesoJaPosicionado +=
+            caixaPosicionada.pesoBloco;
+
+          momentoLateralAtual +=
+            centroY *
+            caixaPosicionada.pesoBloco;
+        });
+
+        // Centro lateral da primeira unidade
+        const centroYCaixa1 =
+          posicaoYGrupo +
+          caixa.larg / 2;
+
+        // Centro lateral da segunda unidade
+        const centroYCaixa2 =
+          posicaoYGrupo +
+          caixa.larg +
+          caixaParceira.larg / 2;
+
+        const pesoProjetado =
+          pesoJaPosicionado +
+          caixa.pesoBloco +
+          caixaParceira.pesoBloco;
+
+        const momentoProjetado =
+          momentoLateralAtual +
+          centroYCaixa1 * caixa.pesoBloco +
+          centroYCaixa2 * caixaParceira.pesoBloco;
+
+        const cgLateralProjetado =
+          pesoProjetado > 0
+            ? momentoProjetado / pesoProjetado
+            : veiculo.largFisica / 2;
+
+        const desvioProjetado =
+          Math.abs(
+            cgLateralProjetado -
+            veiculo.largFisica / 2
+          );
+
+        const desperdicioGrupo =
+          espaco.comp * espaco.larg -
+          compGrupo * largGrupo;
+
+        const pontuacaoGrupo =
+          desvioProjetado * 1000000 +
+          espaco.y * 1000 +
+          espaco.x * 100 +
+          desperdicioGrupo;
+
+        if (
+          melhorPosicaoGrupo === null ||
+          pontuacaoGrupo < melhorPosicaoGrupo.pontuacao
+        ) {
+          melhorPosicaoGrupo = {
+            x: posicaoXGrupo,
+            y: posicaoYGrupo,
+            pontuacao: pontuacaoGrupo,
+          };
+        }
+      });
+
+      // =====================================================
+      // Se existe espaço para o par, posiciona as duas
+      // unidades ao mesmo tempo.
+      // =====================================================
+
+      if (melhorPosicaoGrupo) {
+
+        caixa.X_Fisico =
+          melhorPosicaoGrupo.x;
+
+        caixa.Y_Fisico =
+          melhorPosicaoGrupo.y;
+
+        caixa.compRender =
+          caixa.comp;
+
+        caixa.largRender =
+          caixa.larg;
+
+
+        caixaParceira.X_Fisico =
+          melhorPosicaoGrupo.x;
+
+        caixaParceira.Y_Fisico =
+          melhorPosicaoGrupo.y +
+          caixa.larg;
+
+        caixaParceira.compRender =
+          caixaParceira.comp;
+
+        caixaParceira.largRender =
+          caixaParceira.larg;
+
+
+        caixasPosicionadas.push(
+          caixa,
+          caixaParceira
+        );
+
+        caixasProcessadasEmGrupo.add(caixa);
+        caixasProcessadasEmGrupo.add(caixaParceira);
+
+        espaçosLivres = removerAreaOcupada(espaçosLivres, {
+          x: melhorPosicaoGrupo.x,
+          y: melhorPosicaoGrupo.y,
+          comp: compGrupo,
+          larg: largGrupo,
+        });
+
+        return;
+      }
+    }
+
+    // Se não existir espaço físico para o agrupamento,
+    // segue normalmente com o posicionamento individual.
+
+    let melhorPosicao = null;
+
+    espaçosLivres.forEach((espaco) => {
+    // Sem giro automático: só a orientação informada pelo usuário.
+    const orientacoes = [
+    {
+      comp: caixa.comp,
+      larg: caixa.larg,
+      girado: false,
+    },
+  ];
+
+      orientacoes.forEach((orientacao) => {
+        const cabeNoEspaco =
+          orientacao.comp <= espaco.comp + 0.01 &&
+          orientacao.larg <= espaco.larg + 0.01;
+
+        if (!cabeNoEspaco) {
+          return;
+        }
+
+        let posicaoX = espaco.x;
+        let posicaoY = espaco.y;
+        let pontuacao = 0;
+
+        if (caixa.ehCargaPesada) {
+          const posicaoIdealX =
+            centroZonaEixos -
+            orientacao.comp / 2;
+
+          const posicaoIdealY =
+            veiculo.largFisica / 2 -
+            orientacao.larg / 2;
+
+          const maximoX =
+            espaco.x +
+            espaco.comp -
+            orientacao.comp;
+
+          const maximoY =
+            espaco.y +
+            espaco.larg -
+            orientacao.larg;
+
+          posicaoX = Math.max(
+            espaco.x,
+            Math.min(posicaoIdealX, maximoX),
+          );
+
+          posicaoY = Math.max(
+            espaco.y,
+            Math.min(posicaoIdealY, maximoY),
+          );
+
+          const centroCargaX =
+            posicaoX +
+            orientacao.comp / 2;
+
+          const centroCargaY =
+            posicaoY +
+            orientacao.larg / 2;
+
+          const distanciaEixos = Math.abs(
+            centroCargaX -
+            centroZonaEixos,
+          );
+
+          const distanciaLateral = Math.abs(
+            centroCargaY -
+            veiculo.largFisica / 2,
+          );
+
+          const desperdicio =
+            espaco.comp * espaco.larg -
+            orientacao.comp * orientacao.larg;
+
+          pontuacao =
+            distanciaEixos * 1000 +
+            distanciaLateral * 100 +
+            desperdicio;
+        } else {
+          /*
+            Carga leve:
+
+            1. prioriza a linha mais baixa;
+            2. avança da esquerda para a direita;
+            3. prefere orientação normal;
+            4. usa o menor espaço suficiente.
+          */
+         const desperdicio =
+    espaco.comp * espaco.larg -
+    orientacao.comp * orientacao.larg;
+
+  // =====================================================
+  // C4 - BALANCEAMENTO LATERAL PREDITIVO
+  //
+  // Em vez de centralizar esta caixa isoladamente,
+  // estima como ficará o CG lateral do conjunto caso
+  // esta posição seja escolhida.
+  // =====================================================
+
+  let pesoJaPosicionado = 0;
+  let momentoLateralAtual = 0;
+
+  caixasPosicionadas.forEach((caixaPosicionada) => {
+    const centroYCaixaPosicionada =
+      caixaPosicionada.Y_Fisico +
+      caixaPosicionada.largRender / 2;
+
+    pesoJaPosicionado +=
+      caixaPosicionada.pesoBloco;
+
+    momentoLateralAtual +=
+      centroYCaixaPosicionada *
+      caixaPosicionada.pesoBloco;
+  });
+
+  const centroCargaY =
+    posicaoY +
+    orientacao.larg / 2;
+
+  const pesoProjetado =
+    pesoJaPosicionado +
+    caixa.pesoBloco;
+
+  const momentoLateralProjetado =
+    momentoLateralAtual +
+    centroCargaY *
+    caixa.pesoBloco;
+
+  const cgLateralProjetado =
+    pesoProjetado > 0
+      ? momentoLateralProjetado / pesoProjetado
+      : veiculo.largFisica / 2;
+
+  const desvioCgLateralProjetado =
+    Math.abs(
+      cgLateralProjetado -
+      veiculo.largFisica / 2
+    );
+
+  pontuacao =
+    desvioCgLateralProjetado * 100 +
+    desperdicio;
+
+        }
+
+        if (
+          melhorPosicao === null ||
+          pontuacao < melhorPosicao.pontuacao
+        ) {
+          melhorPosicao = {
+            posicaoX,
+            posicaoY,
+            comp: orientacao.comp,
+            larg: orientacao.larg,
+            girado: orientacao.girado,
+            pontuacao,
+          };
+        }
+      });
+    });
+
+    if (melhorPosicao) {
+      caixa.X_Fisico =
+        melhorPosicao.posicaoX;
+
+      caixa.Y_Fisico =
+        melhorPosicao.posicaoY;
+
+      caixa.compRender =
+        melhorPosicao.comp;
+
+      caixa.largRender =
+        melhorPosicao.larg;
+
+      caixa.girado =
+        melhorPosicao.girado;
+
+      caixasPosicionadas.push(caixa);
+
+      espaçosLivres = removerAreaOcupada(espaçosLivres, {
+        x: caixa.X_Fisico,
+        y: caixa.Y_Fisico,
+        comp: caixa.compRender,
+        larg: caixa.largRender,
+      });
+
+      return;
+    }
+
+    if (posicionarCaixaComAET(caixa, veiculo)) {
+      caixasPosicionadas.push(caixa);
+      return;
+    }
+
+    globalEstorouMetragem = true;
+    globalItensExcedentes.push(caixa);
+
+    caixa.X_Fisico =
+      veiculo.compFisico +
+      0.2 +
+      (globalItensExcedentes.length - 1) *
+        (caixa.comp + 0.15);
+
+    caixa.Y_Fisico = 0;
+    caixa.compRender = caixa.comp;
+    caixa.largRender = caixa.larg;
+
+    caixasPosicionadas.push(caixa);
+  });
+
+  return espaçosLivres;
+}
+
+// =====================================================
+// C3 - AJUSTE DE CG E CLASSIFICAÇÃO DE PESO
+//
+// Extraída de renderizarArrumacaoLogica em 2024 —
+// desloca o conjunto de caixas para aproximar o CG da
+// zona dos eixos, calcula o CG final, aciona as análises
+// transversal/longitudinal e monta o diagnóstico de peso.
+// =====================================================
+
+function ajustarCgEClassificarPeso(caixasPosicionadas, veiculo, centroZonaEixos, inicioZonaEixos, fimZonaEixos) {
+if (!globalEstorouMetragem && caixasPosicionadas.length > 0) {
+    // REGRA: o conjunto inteiro se desloca junto. Antes, o filtro por limites
+    // do veículo deixava de fora caixas que estavam exatamente no limite da
+    // tolerância de 1 cm (uma comparação de números decimais falhava por uma
+    // diferença minúscula, como 13,51 contra 13,510000000000002). Essas caixas
+    // não acompanhavam as vizinhas e passavam a ocupar o mesmo espaço delas.
+    // Só ficam de fora as peças marcadas como excesso de largura (AET).
+    const caixasDentroDoVeiculo = caixasPosicionadas.filter(
+      (caixa) => !caixa.excessoAET,
+    );
+
+    if (caixasDentroDoVeiculo.length > 0) {
+      const menorX = Math.min(
+        ...caixasDentroDoVeiculo.map(
+          (caixa) => caixa.X_Fisico,
+        ),
+      );
+
+      const maiorX = Math.max(
+        ...caixasDentroDoVeiculo.map(
+          (caixa) =>
+            caixa.X_Fisico + caixa.compRender,
+        ),
+      );
+
+      const menorY = Math.min(
+        ...caixasDentroDoVeiculo.map(
+          (caixa) => caixa.Y_Fisico,
+        ),
+      );
+
+      const maiorY = Math.max(
+        ...caixasDentroDoVeiculo.map(
+          (caixa) =>
+            caixa.Y_Fisico + caixa.largRender,
+        ),
+      );
+
+      const comprimentoOcupado = maiorX - menorX;
+const larguraOcupada = maiorY - menorY;
+
+/*
+  C3 - AJUSTE FINAL PELO CENTRO DE GRAVIDADE
+
+  A arrumação física já foi validada neste ponto.
+
+  Em vez de simplesmente centralizar o conjunto pelo seu
+  tamanho geométrico, calculamos o CG longitudinal atual
+  e deslocamos TODO o conjunto para aproximá-lo do centro
+  estimado da região dos eixos.
+
+  Como todas as cargas se movem juntas:
+  - não surgem colisões;
+  - nenhuma posição relativa é alterada;
+  - a arrumação física continua válida.
+*/
+
+let pesoTotalAjusteCG = 0;
+let momentoXAjusteCG = 0;
+
+caixasDentroDoVeiculo.forEach((caixa) => {
+  const centroBlocoX =
+    caixa.X_Fisico +
+    caixa.compRender / 2;
+
+  pesoTotalAjusteCG += caixa.pesoBloco;
+
+  momentoXAjusteCG +=
+    centroBlocoX *
+    caixa.pesoBloco;
+});
+
+let cgAtualX = veiculo.compFisico / 2;
+
+if (pesoTotalAjusteCG > 0) {
+  cgAtualX =
+    momentoXAjusteCG /
+    pesoTotalAjusteCG;
+}
+
+/*
+  Movimento necessário para levar o CG ao centro
+  estimado da região dos eixos.
+*/
+const deslocamentoIdealX =
+  centroZonaEixos - cgAtualX;
+
+/*
+  Limites físicos para deslocar TODO o conjunto
+  sem ultrapassar a frente ou a traseira do veículo.
+*/
+const deslocamentoMinimoX =
+  -menorX;
+
+const deslocamentoMaximoX =
+  veiculo.compFisico - maiorX;
+
+/*
+  Usa o deslocamento ideal quando possível.
+
+  Caso não exista espaço suficiente, utiliza o maior
+  deslocamento fisicamente permitido.
+*/
+const deslocamentoX = Math.max(
+  deslocamentoMinimoX,
+  Math.min(
+    deslocamentoIdealX,
+    deslocamentoMaximoX,
+  ),
+);
+
+/*
+  No eixo lateral continuamos centralizando
+  geometricamente por enquanto.
+*/
+const deslocamentoY =
+  (veiculo.largFisica - larguraOcupada) / 2 - menorY;
+
+caixasDentroDoVeiculo.forEach((caixa) => {
+  caixa.X_Fisico += deslocamentoX;
+  caixa.Y_Fisico += deslocamentoY;
+});
+    }
+  }
+
+  // =====================================================
+  // C3 - DIAGNÓSTICO DOS BLOCOS E PESOS
+  // =====================================================
+
+  // console.group(`C3 — Distribuição de peso: ${veiculo.nome}`);
+
+  let pesoTotalBlocos = 0;
+
+  caixasPosicionadas.forEach((caixa) => {
+    pesoTotalBlocos += caixa.pesoBloco;
+  });
+
+  // =====================================================
+  // C3 - CÁLCULO DO CENTRO DE GRAVIDADE
+  // =====================================================
+
+  let somaMomentoX = 0;
+  let somaMomentoY = 0;
+
+  caixasPosicionadas.forEach((caixa) => {
+    const centroBlocoX =
+      caixa.X_Fisico + caixa.compRender / 2;
+
+    const centroBlocoY =
+      caixa.Y_Fisico + caixa.largRender / 2;
+
+    somaMomentoX += centroBlocoX * caixa.pesoBloco;
+    somaMomentoY += centroBlocoY * caixa.pesoBloco;
+  });
+
+  let centroGravidadeX = 0;
+  let centroGravidadeY = 0;
+
+  if (pesoTotalBlocos > 0) {
+    centroGravidadeX = somaMomentoX / pesoTotalBlocos;
+    centroGravidadeY = somaMomentoY / pesoTotalBlocos;
+  }
+
+mensagemTransversalCgAtual = calcularAnaliseTransversalCg(centroGravidadeY, veiculo);
+
+/*
+  C3 - CLASSIFICAÇÃO DO EQUILÍBRIO LONGITUDINAL
+
+  Compara o CG longitudinal final da carga com o centro
+  estimado da região dos eixos.
+
+  Esta classificação é interna e experimental.
+*/
+
+const {
+  diferencaCgEixos,
+  nivelCg,
+  classificacaoCg,
+  orientacaoLongitudinalCg,
+  ressalvaCg,
+} = calcularAnaliseLongitudinalCg(centroGravidadeX, centroZonaEixos, veiculo);
+
+orientacaoLongitudinalCgAtual = orientacaoLongitudinalCg;
+ressalvaCgAtual = ressalvaCg;
+
+/*
+  C3 - DIAGNÓSTICO OPERACIONAL CONSOLIDADO
+
+  Centraliza os principais resultados da análise
+  de distribuição de peso e centro de gravidade.
+
+  Este objeto será usado futuramente por:
+  - interface;
+  - alertas;
+  - PDF;
+  - Excel;
+  - relatórios operacionais.
+*/
+
+/*
+  C3 - CLASSIFICAÇÃO DA MARGEM OPERACIONAL DE PESO
+
+  Analisa quanto da capacidade máxima cadastrada
+  do veículo está sendo utilizada pela carga.
+*/
+
+const percentualPeso =
+  pesoTotalBlocos / veiculo.pesoMax;
+
+let nivelMargemPeso = "";
+let classificacaoMargemPeso = "";
+
+if (percentualPeso <= LIMITE_PESO_NORMAL) {
+  nivelMargemPeso = "normal";
+
+  classificacaoMargemPeso =
+    "NORMAL - dentro da margem operacional";
+} else if (percentualPeso <= LIMITE_PESO_ATENCAO) {
+  nivelMargemPeso = "atencao";
+
+  classificacaoMargemPeso =
+    "ATENÇÃO - aproximação do limite operacional";
+} else if (percentualPeso <= 1) {
+  nivelMargemPeso = "limite";
+
+  classificacaoMargemPeso =
+    "LIMITE OPERACIONAL - avaliar veículo maior ou fracionamento";
+} else {
+  nivelMargemPeso = "incompativel";
+
+  classificacaoMargemPeso =
+    "INCOMPATÍVEL - capacidade máxima de peso excedida";
+}
+
+const diagnosticoCg = {
+  pesoTotalKg:
+    Number(
+      pesoTotalBlocos.toFixed(2),
+    ),
+
+  cgLongitudinalMetros:
+    Number(
+      centroGravidadeX.toFixed(2),
+    ),
+
+  cgLateralMetros:
+    Number(
+      centroGravidadeY.toFixed(2),
+    ),
+
+  centroGeometricoXMetros:
+    Number(
+      (veiculo.compFisico / 2).toFixed(2),
+    ),
+
+  centroGeometricoYMetros:
+    Number(
+      (veiculo.largFisica / 2).toFixed(2),
+    ),
+
+  zonaEixos: {
+    inicioMetros:
+      Number(
+        inicioZonaEixos.toFixed(2),
+      ),
+
+    fimMetros:
+      Number(
+        fimZonaEixos.toFixed(2),
+      ),
+
+    centroMetros:
+      Number(
+        centroZonaEixos.toFixed(2),
+      ),
+  },
+
+  diferencaCgEixosMetros:
+    Number(
+      diferencaCgEixos.toFixed(2),
+    ),
+
+  nivel:
+    nivelCg,
+
+  classificacao:
+    classificacaoCg,
+};
+
+  return { pesoTotalBlocos, centroGravidadeX, centroGravidadeY };
+}
+
+function renderizarArrumacaoLogica(
+  veiculo,
+  itens,
+  svgID,
+  legendaID,
+  dimensaoID,
+) {
+  const svgCima = document.getElementById(svgID);
+
+  const legendaContainer = document.getElementById(legendaID);
+
+  const txtDimensoes = document.getElementById(dimensaoID);
+
+  svgCima.innerHTML = "";
+  legendaContainer.innerHTML = "";
+  globalEstorouMetragem = false;
+  globalItensExcedentes = [];
+
+  const larguraMaximaCanvasGeral = 900;
+  const alturaCanvasGeral = 280;
+  const margemBorda = 14;
+
+  const comprimentoReferenciaVisual = 13.5;
+  const larguraReferenciaVisual = 2.45;
+
+  const escalaGlobalX =
+    (larguraMaximaCanvasGeral - margemBorda * 2) / comprimentoReferenciaVisual;
+
+  const escalaGlobalY =
+    (alturaCanvasGeral - margemBorda * 2) / larguraReferenciaVisual;
+
+  let larguraBauPixels = veiculo.compFisico * escalaGlobalX;
+  let alturaBauPixels = veiculo.largFisica * escalaGlobalY;
+
+    renderizarLegendaAgrupada(itens, legendaContainer);
+
+  let caixasIndividuais = montarCaixasIndividuais(itens, veiculo);
+
+const { inicioZonaEixos, fimZonaEixos, centroZonaEixos } =
+  classificarCaixasPorPeso(caixasIndividuais, veiculo);
+
+let espaçosLivres = [
+  {
+    x: 0,
+    y: 0,
+    comp: veiculo.compFisico,
+    larg: veiculo.largFisica,
+  },
+];
+
+let caixasPosicionadas = [];
+
+espaçosLivres = posicionarCaixasNoEspaco(
+  caixasIndividuais,
+  veiculo,
+  centroZonaEixos,
+  espaçosLivres,
+  caixasPosicionadas,
+);
+
+
+/*
+  C3 - FALLBACK DE ARRUMAÇÃO FÍSICA
+
+  Se a distribuição otimizada por peso não conseguiu
+  acomodar todos os blocos, tenta novamente usando uma
+  arrumação compacta puramente geométrica.
+
+  Assim, uma tentativa ruim de balanceamento não faz uma
+  carga fisicamente compatível ser considerada excedente.
+*/
+
+let usouFallbackFisico = false;
+
+if (globalEstorouMetragem) {
+  const arrumacaoFallback =
+    tentarArrumacaoCompacta(caixasIndividuais, veiculo, centroZonaEixos);
+
+  if (arrumacaoFallback) {
+    caixasPosicionadas = arrumacaoFallback;
+globalEstorouMetragem = false;
+globalItensExcedentes = [];
+
+usouFallbackFisico = true;
+  }
+}
+
+const { pesoTotalBlocos, centroGravidadeX, centroGravidadeY } =
+  ajustarCgEClassificarPeso(caixasPosicionadas, veiculo, centroZonaEixos, inicioZonaEixos, fimZonaEixos);
+
+  let maiorX = larguraBauPixels;
+
+caixasPosicionadas.forEach((c) => {
+  const fimCaixa =
+    (c.X_Fisico + c.compRender) * escalaGlobalX;
+
+  if (fimCaixa > maiorX) {
+    maiorX = fimCaixa;
+  }
+});
+
+let tamanhoFinalW = Math.max(
+  maiorX + margemBorda * 2 + 30,
+  900
+);
+
+  const offsetX = (tamanhoFinalW - larguraBauPixels) / 2;
+  const offsetY = margemBorda;
+
+  svgCima.setAttribute("width", tamanhoFinalW);
+  svgCima.setAttribute("height", alturaBauPixels + margemBorda * 2 + 110);
+
+  if (globalEstorouMetragem) {
+    txtDimensoes.className = "dimensoes-bau-tag estourou";
+    txtDimensoes.innerHTML = `⚠️ EXCESSO DE METRAGEM LINEAR (${escaparHtml(veiculo.nome)}): Espaço de ${veiculo.compFisico.toFixed(2)}m esgotado! Carga transbordando para fora do baú.`;
+  } else {
+    txtDimensoes.className = "dimensoes-bau-tag";
+    txtDimensoes.innerHTML = `📏 Espaço Útil do Baú (${escaparHtml(veiculo.nome)}): Comprimento: ${veiculo.compFisico.toFixed(2)}m | Largura: ${veiculo.largFisica.toFixed(2)}m | Altura Máx: ${veiculo.altFisica.toFixed(2)}m`;
+  }
+
+  let bgRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  bgRect.setAttribute("x", offsetX);
+  bgRect.setAttribute("y", offsetY);
+  bgRect.setAttribute("width", larguraBauPixels);
+  bgRect.setAttribute("height", alturaBauPixels);
+  bgRect.setAttribute("rx", "8");
+  bgRect.setAttribute("ry", "8");
+  bgRect.setAttribute("fill", globalEstorouMetragem ? "#fff5f5" : "#f8fafc");
+  bgRect.setAttribute("stroke", globalEstorouMetragem ? "#ef4444" : "#1e40af");
+  bgRect.setAttribute("stroke-width", "3");
+  bgRect.setAttribute("filter", "drop-shadow(0px 4px 6px rgba(15,23,42,0.18))");
+
+  if (globalEstorouMetragem) {
+    bgRect.setAttribute("stroke-dasharray", "8,4");
+  }
+
+  svgCima.appendChild(bgRect);
+
+  desenharLinhaCentralTransversal(svgCima, offsetX, offsetY, larguraBauPixels, alturaBauPixels);
+  desenharCabineReferencia(svgCima, offsetX, offsetY, alturaBauPixels);
+
+  desenharCaixasNoMapa(svgCima, caixasPosicionadas, veiculo, offsetX, offsetY, escalaGlobalX, escalaGlobalY);
+
+  const svgPersonalizado = document.getElementById(
+    svgID.replace("svg-", "svg-personalizado-"),
+  );
+
+  if (svgPersonalizado) {
+    svgPersonalizado.innerHTML = "";
+
+    const alturaEspera = 130;
+    const offsetYEspera = offsetY + alturaBauPixels + 34;
+
+    svgPersonalizado.setAttribute("width", tamanhoFinalW);
+    svgPersonalizado.setAttribute(
+      "height",
+      offsetYEspera + alturaEspera + margemBorda + 30,
+    );
+
+    let bgRectPersonalizado = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bgRectPersonalizado.setAttribute("x", offsetX);
+    bgRectPersonalizado.setAttribute("y", offsetY);
+    bgRectPersonalizado.setAttribute("width", larguraBauPixels);
+    bgRectPersonalizado.setAttribute("height", alturaBauPixels);
+    bgRectPersonalizado.setAttribute("rx", "8");
+    bgRectPersonalizado.setAttribute("ry", "8");
+    bgRectPersonalizado.setAttribute("fill", "#f8fafc");
+    bgRectPersonalizado.setAttribute("stroke", "#1e40af");
+    bgRectPersonalizado.setAttribute("stroke-width", "3");
+    svgPersonalizado.appendChild(bgRectPersonalizado);
+
+    desenharLinhaCentralTransversal(svgPersonalizado, offsetX, offsetY, larguraBauPixels, alturaBauPixels);
+    desenharCabineReferencia(svgPersonalizado, offsetX, offsetY, alturaBauPixels);
+
+    const areaEspera = {
+      x: offsetX,
+      y: offsetYEspera,
+      largura: larguraBauPixels,
+      altura: alturaEspera,
+    };
+
+    let bgRectEspera = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bgRectEspera.setAttribute("x", areaEspera.x);
+    bgRectEspera.setAttribute("y", areaEspera.y);
+    bgRectEspera.setAttribute("width", areaEspera.largura);
+    bgRectEspera.setAttribute("height", areaEspera.altura);
+    bgRectEspera.setAttribute("rx", "8");
+    bgRectEspera.setAttribute("ry", "8");
+    bgRectEspera.setAttribute("fill", "#f1f5f9");
+    bgRectEspera.setAttribute("stroke", "#94a3b8");
+    bgRectEspera.setAttribute("stroke-width", "2");
+    bgRectEspera.setAttribute("stroke-dasharray", "6,4");
+    svgPersonalizado.appendChild(bgRectEspera);
+
+    let rotuloEspera = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    rotuloEspera.setAttribute("x", areaEspera.x + 10);
+    rotuloEspera.setAttribute("y", areaEspera.y - 10);
+    rotuloEspera.setAttribute("fill", "#64748b");
+    rotuloEspera.setAttribute("font-size", "12px");
+    rotuloEspera.setAttribute("font-weight", "bold");
+    rotuloEspera.textContent = "📦 Área de Espera — arraste uma caixa pra cá pra girar com espaço livre";
+    svgPersonalizado.appendChild(rotuloEspera);
+
+    // Restaura o último arranjo manual salvo, desde que a
+    // carga (itens + veículo) seja exatamente a mesma de quando
+    // foi salvo. Se mudou, cada caixa nasce no veículo, na
+    // posição que o cálculo automático encontrou.
+    const usarEstadoSalvo =
+      estadoPersonalizadoSalvo &&
+      estadoPersonalizadoSalvo.assinatura === assinaturaCargaAtual;
+
+    const caixasPersonalizadas = caixasPosicionadas.map((c) => {
+      const clone = { ...c, zona: "veiculo" };
+
+      if (usarEstadoSalvo && estadoPersonalizadoSalvo.posicoes[c.id]) {
+        Object.assign(clone, estadoPersonalizadoSalvo.posicoes[c.id]);
+      }
+
+      return clone;
+    });
+
+    const numeroVeiculo = svgID.replace("svg-", "");
+    caixasPersonalizadasPorViagem[numeroVeiculo] = caixasPersonalizadas;
+
+    const reavaliarPersonalizado = (caixasAtuais) => {
+      const avaliacao = avaliarArranjoPersonalizado(
+        caixasAtuais,
+        veiculo,
+        centroZonaEixos,
+      );
+
+      avaliacoesPersonalizadoPorViagem[numeroVeiculo] = avaliacao;
+      renderizarAvaliacaoPersonalizada(numeroVeiculo, avaliacao);
+    };
+
+    desenharCaixasNoMapaInterativo(
+      svgPersonalizado,
+      caixasPersonalizadas,
+      veiculo,
+      offsetX,
+      offsetY,
+      larguraBauPixels,
+      alturaBauPixels,
+      escalaGlobalX,
+      escalaGlobalY,
+      areaEspera,
+      reavaliarPersonalizado,
+    );
+
+    reavaliarPersonalizado(caixasPersonalizadas);
+  }
+
+  desenharPainelComparacaoCG(svgCima, pesoTotalBlocos, centroGravidadeX, centroGravidadeY, veiculo, offsetX, offsetY, alturaBauPixels, larguraBauPixels, escalaGlobalX, escalaGlobalY);
+
+  const resumoExcedente = document.getElementById("resumo-excedente");
+}
+
+// =====================================================
+// AVISOS DE ATENÇÃO DO SELO PARA OS RELATÓRIOS (PDF / EXCEL)
+//
+// O selo de compatibilidade pode mostrar mais de um tipo de atenção.
+// Os relatórios precisam reconhecer TODOS eles; do contrário bloqueiam
+// a exportação com "operação não compatível" sem haver incompatibilidade.
+// Retorna null quando o selo não mostra nenhum destes avisos.
+// =====================================================
+
+function obterAvisoComplementarDoSelo(textoSelo) {
+  if (textoSelo.includes("ATENÇÃO À DISTRIBUIÇÃO LATERAL DA CARGA")) {
+    return {
+      titulo: "ATENÇÃO À DISTRIBUIÇÃO LATERAL DA CARGA",
+      mensagem: mensagemTransversalCgAtual
+        ? mensagemTransversalCgAtual.mensagem
+        : "A distribuição estimada da carga apresenta concentração lateral. Recomenda-se revisar o posicionamento da carga antes da operação.",
+      statusExcel: "ATENÇÃO À DISTRIBUIÇÃO LATERAL DA CARGA",
+      dashboardExcel: "REVISAR LATERAL",
+      statusPdf: "STATUS: ATENÇÃO À DISTRIBUIÇÃO LATERAL DA CARGA",
+    };
+  }
+
+  if (textoSelo.includes("CONCENTRAÇÃO LONGITUDINAL")) {
+    const titulo = textoSelo.includes("CONCENTRAÇÃO LONGITUDINAL TRASEIRA")
+      ? "CONCENTRAÇÃO LONGITUDINAL TRASEIRA"
+      : "CONCENTRAÇÃO LONGITUDINAL DIANTEIRA";
+
+    return {
+      titulo,
+      mensagem: orientacaoLongitudinalCgAtual
+        ? orientacaoLongitudinalCgAtual.mensagem
+        : "A distribuição estimada apresenta concentração de peso em uma das extremidades do espaço útil. Recomenda-se verificar o posicionamento da carga antes da operação.",
+      statusExcel: titulo,
+      dashboardExcel: "REVISAR LONGITUDINAL",
+      statusPdf: "STATUS: " + titulo,
+    };
+  }
+
+  if (textoSelo.includes("LIMITE OPERACIONAL")) {
+    return {
+      titulo: "LIMITE OPERACIONAL DE PESO",
+      mensagem:
+        "A carga permanece dentro da capacidade máxima cadastrada do veículo, porém utiliza 95% ou mais da capacidade de peso. Avalie outro veículo ou o fracionamento da carga.",
+      statusExcel: "LIMITE OPERACIONAL DE PESO",
+      dashboardExcel: "LIMITE DE PESO",
+      statusPdf: "STATUS: LIMITE OPERACIONAL DE PESO (95% OU MAIS DA CAPACIDADE)",
+    };
+  }
+
+  return null;
+}
+
+// =====================================================
+// CRÍTICO NO CÁLCULO AUTOMÁTICO x ARRANJO MANUAL (PERSONALIZADO)
+//
+// Quando o cálculo automático de um veículo é CRÍTICO, o relatório só pode
+// ser liberado se a aba Personalizado desse veículo estiver ativa, porque aí
+// vale o arranjo manual (que tem a sua própria avaliação: se ele for crítico
+// ou incompleto, os relatórios continuam bloqueados).
+// =====================================================
+
+function resolverCriticoAutomatico(distribuicaoCritica) {
+  const resultado = {
+    pendente: false,
+    substituidoPeloManual: false,
+    veiculosSubstituidos: [],
+  };
+
+  if (!distribuicaoCritica) {
+    return resultado;
+  }
+
+  const criticos = Object.keys(automaticoCriticoPorVeiculo).filter(
+    (numero) => automaticoCriticoPorVeiculo[numero],
+  );
+
+  // Sem informação por veículo: por segurança, continua bloqueando.
+  if (criticos.length === 0) {
+    resultado.pendente = true;
+    return resultado;
+  }
+
+  criticos.forEach((numero) => {
+    const painel = document.getElementById(`painel-personalizado-${numero}`);
+    const ativo = painel && painel.classList.contains("painel-aba-ativa");
+    const avaliacao = avaliacoesPersonalizadoPorViagem[numero];
+
+    if (ativo && avaliacao) {
+      resultado.veiculosSubstituidos.push(numero);
+    } else {
+      resultado.pendente = true;
+    }
+  });
+
+  resultado.substituidoPeloManual = !resultado.pendente;
+
+  return resultado;
+}
+
+function montarAvisoCriticoSubstituido(veiculos) {
+  return {
+    titulo: "CÁLCULO AUTOMÁTICO CRÍTICO — ARRANJO MANUAL CONSIDERADO",
+    mensagem:
+      `O cálculo automático classificou a distribuição da carga como CRÍTICA (veículo ${veiculos.join(", ")}). ` +
+      "Este relatório considera o arranjo manual da aba Personalizado, que não foi classificado como crítico. " +
+      "A responsabilidade pela distribuição final é de quem realiza o carregamento.",
+  };
+}
+
+function exportarExcel() {
+
+  const selo = document.getElementById("selo-compatibilidade");
+const textoSelo = selo?.textContent.trim() || "";
+
+const cargaAprovada =
+  selo &&
+  selo.style.display !== "none" &&
+  textoSelo.includes("CARGA APROVADA");
+
+const atencaoRegulatoria =
+  selo &&
+  selo.style.display !== "none" &&
+  textoSelo.includes("ATENÇÃO REGULATÓRIA");
+
+const atencaoDistribuicao =
+  selo &&
+  selo.style.display !== "none" &&
+  textoSelo.includes("ATENÇÃO À DISTRIBUIÇÃO DA CARGA");
+
+const distribuicaoCritica =
+  selo &&
+  selo.style.display !== "none" &&
+  (textoSelo.includes("DISTRIBUIÇÃO CRÍTICA DA CARGA") ||
+    textoSelo.includes("DISTRIBUIÇÃO LATERAL CRÍTICA DA CARGA"));
+
+const operacaoNaoCompativel =
+  textoSelo.includes("OPERAÇÃO NÃO COMPATÍVEL");
+
+// Outros avisos de ATENÇÃO que o selo pode mostrar (distribuição lateral,
+// concentração longitudinal e limite operacional). Não são bloqueios.
+const avisoComplementar = obterAvisoComplementarDoSelo(
+  selo && selo.style.display !== "none" ? textoSelo : "",
+);
+
+let avisoC3 =
+  atencaoDistribuicao && ressalvaCgAtual
+    ? ressalvaCgAtual
+    : avisoComplementar;
+
+// Para cada veículo com a aba Personalizado ativa, usa a
+// avaliação ao vivo do arranjo manual em vez do automático —
+// o pior caso entre os veículos decide o status do relatório.
+let personalizadoCritico = false;
+let personalizadoIncompleto = false;
+let personalizadoAtencao = false;
+const detalhesPersonalizado = [];
+
+Object.keys(avaliacoesPersonalizadoPorViagem).forEach((numeroVeiculo) => {
+  const painel = document.getElementById(
+    `painel-personalizado-${numeroVeiculo}`,
+  );
+
+  const ativo = painel && painel.classList.contains("painel-aba-ativa");
+  if (!ativo) return;
+
+  const avaliacao = avaliacoesPersonalizadoPorViagem[numeroVeiculo];
+  if (!avaliacao) return;
+
+  if (avaliacao.nivel === "critico") personalizadoCritico = true;
+  else if (avaliacao.nivel === "incompleto") personalizadoIncompleto = true;
+  else if (avaliacao.nivel === "atencao") personalizadoAtencao = true;
+
+  detalhesPersonalizado.push(
+    `Veículo ${numeroVeiculo} (Personalizado): ${
+      avaliacao.mensagens.join(" ") || "centro de gravidade dentro da faixa adequada."
+    }`,
+  );
+});
+
+const criticoAutomatico = resolverCriticoAutomatico(!!distribuicaoCritica);
+
+if (criticoAutomatico.pendente || personalizadoCritico) {
+  alert(
+    personalizadoCritico
+      ? "O Excel não pode ser gerado: o arranjo manual (aba Personalizado) de um ou mais veículos foi classificado como CRÍTICO. Revise a distribuição antes de exportar."
+      : "O Excel não pode ser gerado porque a distribuição da carga foi classificada como CRÍTICA. Revise o posicionamento da carga antes de prosseguir. Se preferir, monte um arranjo manual na aba Personalizado do veículo e deixe-o adequado antes de exportar.",
+  );
+
+  return;
+}
+
+if (personalizadoIncompleto) {
+  alert(
+    "O Excel não pode ser gerado: existem caixas na Área de Espera (fora do veículo) em um ou mais veículos no modo Personalizado. Posicione todas as caixas antes de exportar.",
+  );
+
+  return;
+}
+
+if (
+  operacaoNaoCompativel ||
+  (
+    !cargaAprovada &&
+    !atencaoRegulatoria &&
+    !atencaoDistribuicao &&
+    !avisoComplementar &&
+    !criticoAutomatico.substituidoPeloManual
+  )
+) {
+  alert(
+    "O Excel não pode ser gerado porque a operação não está compatível.",
+  );
+
+  return;
+}
+
+let textoStatus = "CARGA APROVADA";
+let textoDashboard = "APROVADO";
+
+let corStatus = "DCFCE7";
+let corTexto = "166534";
+
+if (atencaoRegulatoria) {
+  textoStatus = "ATENÇÃO REGULATÓRIA";
+  textoDashboard = "VERIFICAR AET";
+
+  corStatus = "FEF3C7";
+  corTexto = "92400E";
+}
+
+if (atencaoDistribuicao) {
+  textoStatus = "ATENÇÃO À DISTRIBUIÇÃO DA CARGA";
+  textoDashboard = "REVISAR DISTRIBUIÇÃO";
+
+  corStatus = "FEF3C7";
+  corTexto = "92400E";
+}
+
+if (criticoAutomatico.substituidoPeloManual) {
+  avisoC3 = montarAvisoCriticoSubstituido(criticoAutomatico.veiculosSubstituidos);
+
+  if (!personalizadoAtencao) {
+    textoStatus = "ARRANJO MANUAL APROVADO";
+    textoDashboard = "MANUAL APROVADO";
+
+    corStatus = "FEF3C7";
+    corTexto = "92400E";
+  }
+}
+
+if (avisoComplementar) {
+  textoStatus = avisoComplementar.statusExcel;
+  textoDashboard = avisoComplementar.dashboardExcel;
+
+  corStatus = "FEF3C7";
+  corTexto = "92400E";
+}
+
+if (personalizadoAtencao && textoStatus === "CARGA APROVADA") {
+  textoStatus = "ATENÇÃO À DISTRIBUIÇÃO DA CARGA (ARRANJO MANUAL)";
+  textoDashboard = "REVISAR DISTRIBUIÇÃO (MANUAL)";
+
+  corStatus = "FEF3C7";
+  corTexto = "92400E";
+}
+
+  try {
+    const rows = document.querySelectorAll("#tabela-carga tbody tr");
+
+    const agora = new Date();
+    const codigoSimulacao =
+      "DCPRO-" +
+      agora.getFullYear() +
+      String(agora.getMonth() + 1).padStart(2, "0") +
+      String(agora.getDate()).padStart(2, "0") +
+      "-" +
+      String(agora.getHours()).padStart(2, "0") +
+      String(agora.getMinutes()).padStart(2, "0") +
+      String(agora.getSeconds()).padStart(2, "0");
+
+    let listaCarga = [];
+    let pesoTotal = 0;
+    let volumeTotal = 0;
+
+    rows.forEach((tr, index) => {
+      const nome = tr.querySelector(".nome")?.value || `Item ${index + 1}`;
+      const qtd = parseInt(tr.querySelector(".qtd")?.value) || 0;
+
+      const comp =
+        (parseFloat(
+          tr.querySelector(".comp")?.value.replace(/\./g, "").replace(",", "."),
+        ) || 0) / 100;
+      const larg =
+        (parseFloat(
+          tr.querySelector(".larg")?.value.replace(/\./g, "").replace(",", "."),
+        ) || 0) / 100;
+      const alt =
+        (parseFloat(
+          tr.querySelector(".alt")?.value.replace(/\./g, "").replace(",", "."),
+        ) || 0) / 100;
+
+      const peso =
+        Number(
+          tr.querySelector(".peso")?.value.replace(/\./g, "").replace(",", "."),
+        ) || 0;
+
+      pesoTotal += peso * qtd;
+      volumeTotal += comp * larg * alt * qtd;
+
+      listaCarga.push({
+        id: index + 1,
+        nome,
+        qtd,
+        comp,
+        larg,
+        alt,
+        peso,
+        pesoTotal: peso * qtd,
+        volume: comp * larg * alt * qtd,
+      });
+    });
+
+    const cargas = ultimaFrotaCalculada;
+
+    const wb = XLSX.utils.book_new();
+
+    const azul = "1E3A8A";
+    const azulClaro = "EAF2FF";
+    const verde = "DCFCE7";
+    const branco = "FFFFFF";
+    const cinza = "F8FAFC";
+
+    function borda() {
+      return {
+        top: { style: "thin", color: { rgb: "CBD5E1" } },
+        bottom: { style: "thin", color: { rgb: "CBD5E1" } },
+        left: { style: "thin", color: { rgb: "CBD5E1" } },
+        right: { style: "thin", color: { rgb: "CBD5E1" } },
+      };
+    }
+
+    function estiloCelula(
+      bg,
+      cor = "000000",
+      bold = false,
+      tamanho = 11,
+      centro = false,
+    ) {
+      return {
+        font: { bold, sz: tamanho, color: { rgb: cor } },
+        fill: { patternType: "solid", fgColor: { rgb: bg } },
+        border: borda(),
+        alignment: {
+          horizontal: centro ? "center" : "left",
+          vertical: "center",
+          wrapText: true,
+        },
+      };
+    }
+
+    function aplicarEstilo(ws, rangeRef) {
+      const range = XLSX.utils.decode_range(rangeRef);
+
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const ref = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[ref]) continue;
+
+          if (R === range.s.r) {
+            ws[ref].s = estiloCelula(azul, branco, true, 11, true);
+          } else {
+            ws[ref].s = estiloCelula(R % 2 === 0 ? cinza : branco);
+          }
+        }
+      }
+    }
+
+    // =========================
+    // ABA RESUMO
+    // =========================
+    // =========================
+    // ABA RESUMO - DASHBOARD
+    // =========================
+    const resumo = [
+      ["DCPRO - DIMENSIONADOR DE CARGA PRO", "", "", "", ""],
+      ["RELATÓRIO OPERACIONAL DE CARGA", "", "", "", ""],
+      ["", "", "", "", ""],
+      ["Código", codigoSimulacao, "", "Data/Hora", agora.toLocaleString()],
+      ["Status", textoStatus, "", "Veículos", cargas.length],
+      ["PESO TOTAL", "VOLUME TOTAL", "ITENS", "VEÍCULOS", "STATUS"],
+      [
+        formatarBR(pesoTotal) + " kg",
+        formatarBR(volumeTotal) + " m³",
+        listaCarga.length,
+        cargas.length,
+        textoDashboard,
+      ],
+      ["", "", "", ""],
+      ["FROTA UTILIZADA", "", "", "", ""],
+      ["Veículo", "Modelo", "Peso", "Volume", "Ocupação"],
+    ];
+
+    cargas.forEach((carga, index) => {
+      const v = carga.veiculo;
+      const volMax = v.compFisico * v.largFisica * v.altFisica;
+      const pctPeso = (carga.pesoAtual / v.pesoMax) * 100;
+
+      resumo.push([
+        `Veículo ${index + 1}`,
+        v.nome,
+        `${formatarBR(carga.pesoAtual)} / ${formatarBR(v.pesoMax)} kg`,
+        `${formatarBR(carga.volumeAtual)} / ${formatarBR(volMax)} m³`,
+        pctPeso.toFixed(0) + "%",
+      ]);
+    });
+
+    resumo.push(["", "", "", "", ""]);
+
+    resumo.push(["OBSERVAÇÕES", "", "", "", ""]);
+
+    resumo.push([
+      "Relatório gerado automaticamente pelo DCPRO.",
+      "",
+      "",
+      "",
+      "",
+    ]);
+
+    resumo.push([
+      "A projeção apresentada é matemática e serve como apoio operacional. Não substitui conferência técnica presencial, inspeção da carga ou critérios de segurança para transporte.",
+      "",
+      "",
+      "",
+      "",
+    ]);
+
+    if (avisoC3) {
+  resumo.push(["", "", "", "", ""]);
+
+  resumo.push([
+    "C3 / DISTRIBUIÇÃO DA CARGA",
+    "",
+    "",
+    "",
+    "",
+  ]);
+
+  resumo.push([
+    avisoC3.titulo,
+    "",
+    "",
+    "",
+    "",
+  ]);
+
+  resumo.push([
+    avisoC3.mensagem,
+    "",
+    "",
+    "",
+    "",
+  ]);
+}
+
+    const wsResumo = XLSX.utils.aoa_to_sheet(resumo);
+
+    wsResumo["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }, // Título
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } }, // Subtítulo
+      { s: { r: 8, c: 0 }, e: { r: 8, c: 4 } }, // Frota utilizada
+      {
+  s: { r: 11 + cargas.length, c: 0 },
+  e: { r: 11 + cargas.length, c: 4 },
+}, // Observações
+
+{
+  s: { r: 12 + cargas.length, c: 0 },
+  e: { r: 12 + cargas.length, c: 4 },
+}, // Frase 1
+
+{
+  s: { r: 13 + cargas.length, c: 0 },
+  e: { r: 13 + cargas.length, c: 4 },
+}, // Frase 2
+    ];
+
+    if (avisoC3) {
+  wsResumo["!merges"].push(
+    {
+      s: { r: 15 + cargas.length, c: 0 },
+      e: { r: 15 + cargas.length, c: 4 },
+    }, // C3 - título
+
+    {
+      s: { r: 16 + cargas.length, c: 0 },
+      e: { r: 16 + cargas.length, c: 4 },
+    }, // C3 - classificação
+
+    {
+      s: { r: 17 + cargas.length, c: 0 },
+      e: { r: 17 + cargas.length, c: 4 },
+    }, // C3 - mensagem
+  );
+}
+
+    wsResumo["!cols"] = [
+      { wch: 26 },
+      { wch: 28 },
+      { wch: 24 },
+      { wch: 28 },
+      { wch: 18 },
+    ];
+
+    wsResumo["!rows"] = [
+      { hpt: 34 }, // Linha 1
+      { hpt: 24 }, // Linha 2
+      { hpt: 10 }, // Linha 3
+      { hpt: 22 }, // Linha 4
+      { hpt: 22 }, // Linha 5
+      { hpt: 26 }, // Linha 6
+      { hpt: 32 }, // Linha 7
+      { hpt: 10 }, // Linha 8
+      { hpt: 24 }, // Linha 9
+      { hpt: 22 }, // Linha 10
+      { hpt: 22 }, // Linha 11
+      { hpt: 22 }, // Linha 12
+      { hpt: 10 }, // Linha 13
+      { hpt: 24 }, // Linha 14 - OBSERVAÇÕES
+      { hpt: 28 }, // Linha 15 - Frase 1
+      { hpt: 52 }, // Linha 16 - Frase 2
+    ];
+
+    // Textos longos de status: aumenta a altura das linhas para o texto não ser cortado
+    wsResumo["!rows"][4] = { hpt: textoStatus.length > 24 ? 34 : 22 };
+
+    let linhasCartaoStatus = 1;
+    let colunasUsadas = 0;
+
+    textoDashboard.split(" ").forEach((palavra) => {
+      if (colunasUsadas === 0) {
+        colunasUsadas = palavra.length;
+      } else if (colunasUsadas + 1 + palavra.length <= 12) {
+        colunasUsadas += 1 + palavra.length;
+      } else {
+        linhasCartaoStatus++;
+        colunasUsadas = palavra.length;
+      }
+    });
+
+    wsResumo["!rows"][6] = { hpt: Math.max(32, linhasCartaoStatus * 21 + 6) };
+
+    wsResumo["A1"].s = estiloCelula(azul, branco, true, 18, true);
+    wsResumo["A2"].s = estiloCelula(azul, branco, true, 13, true);
+
+    ["A3", "D3", "A4", "D4"].forEach((ref) => {
+      if (wsResumo[ref])
+        wsResumo[ref].s = estiloCelula(azulClaro, azul, true, 11);
+    });
+
+    ["A6", "B6", "C6", "D6", "E6"].forEach((ref) => {
+      if (wsResumo[ref])
+        wsResumo[ref].s = estiloCelula(azul, branco, true, 12, true);
+    });
+
+    ["A7", "B7", "C7", "D7", "E7"].forEach((ref) => {
+  if (wsResumo[ref])
+    wsResumo[ref].s = estiloCelula(
+      corStatus,
+      corTexto,
+      true,
+      15,
+      true
+    );
+});
+
+    wsResumo["A9"].s = estiloCelula(azul, branco, true, 13, true);
+
+    ["A10", "B10", "C10", "D10", "E10"].forEach((ref) => {
+      if (wsResumo[ref])
+        wsResumo[ref].s = estiloCelula(azul, branco, true, 11, true);
+    });
+
+    for (let i = 11; i <= 10 + cargas.length; i++) {
+      ["A", "B", "C", "D", "E"].forEach((col) => {
+        const ref = col + i;
+        if (wsResumo[ref]) {
+          wsResumo[ref].s = estiloCelula(
+            i % 2 === 0 ? cinza : branco,
+            "000000",
+            col === "A" || col === "B",
+            10,
+          );
+        }
+      });
+    }
+
+const linhaObs = 12 + cargas.length;
+const linhaObsTexto1 = linhaObs + 1;
+const linhaObsTexto2 = linhaObs + 2;
+
+    if (wsResumo["A" + linhaObs]) {
+      wsResumo["A" + linhaObs].s = estiloCelula(azul, branco, true, 12, true);
+    }
+
+    if (wsResumo["A" + linhaObsTexto1]) {
+      wsResumo["A" + linhaObsTexto1].s = estiloCelula(
+        branco,
+        "000000",
+        false,
+        10,
+      );
+      wsResumo["A" + linhaObsTexto1].s.alignment = {
+        horizontal: "left",
+        vertical: "center",
+        wrapText: true,
+      };
+    }
+
+    if (wsResumo["A" + linhaObsTexto2]) {
+      wsResumo["A" + linhaObsTexto2].s = estiloCelula(
+        branco,
+        "000000",
+        false,
+        10,
+      );
+      wsResumo["A" + linhaObsTexto2].s.alignment = {
+        horizontal: "left",
+        vertical: "top",
+        wrapText: true,
+      };
+    }
+
+    // Separadores visuais dinâmicos da aba Resumo
+
+// Linha vazia entre a frota e OBSERVAÇÕES
+wsResumo["!rows"][10 + cargas.length] = {
+  hpt: 10,
+};
+
+// Linha vazia entre OBSERVAÇÕES e o bloco C3
+if (avisoC3) {
+  wsResumo["!rows"][14 + cargas.length] = {
+    hpt: 10,
+  };
+}
+
+    // Alturas dinâmicas do bloco de observações
+wsResumo["!rows"][linhaObs - 1] = {
+  hpt: 24,
+};
+
+wsResumo["!rows"][linhaObsTexto1 - 1] = {
+  hpt: 28,
+};
+
+wsResumo["!rows"][linhaObsTexto2 - 1] = {
+  hpt: 52,
+};
+
+    if (avisoC3) {
+const linhaC3Titulo = 16 + cargas.length;
+const linhaC3Status = 17 + cargas.length;
+const linhaC3Mensagem = 18 + cargas.length;
+
+  // Título do bloco C3
+  if (wsResumo["A" + linhaC3Titulo]) {
+    wsResumo["A" + linhaC3Titulo].s =
+      estiloCelula(
+        azul,
+        branco,
+        true,
+        12,
+        false,
+      );
+
+    wsResumo["A" + linhaC3Titulo].s.alignment = {
+      horizontal: "left",
+      vertical: "center",
+      wrapText: true,
+    };
+  }
+
+  // Classificação do C3
+  if (wsResumo["A" + linhaC3Status]) {
+    wsResumo["A" + linhaC3Status].s =
+      estiloCelula(
+        "FEF3C7",
+        "92400E",
+        true,
+        11,
+        false,
+      );
+
+    wsResumo["A" + linhaC3Status].s.alignment = {
+      horizontal: "left",
+      vertical: "center",
+      wrapText: true,
+    };
+  }
+
+  // Mensagem operacional
+  if (wsResumo["A" + linhaC3Mensagem]) {
+    wsResumo["A" + linhaC3Mensagem].s =
+      estiloCelula(
+        "FFFBEB",
+        "78350F",
+        false,
+        10,
+        false,
+      );
+
+    wsResumo["A" + linhaC3Mensagem].s.alignment = {
+      horizontal: "left",
+      vertical: "center",
+      wrapText: true,
+    };
+  }
+
+  // Alturas das novas linhas
+  wsResumo["!rows"][linhaC3Titulo - 1] = {
+    hpt: 24,
+  };
+
+  wsResumo["!rows"][linhaC3Status - 1] = {
+    hpt: 26,
+  };
+
+  wsResumo["!rows"][linhaC3Mensagem - 1] = {
+    hpt: 42,
+  };
+}
+
+    for (let ref in wsResumo) {
+      if (ref[0] !== "!" && !wsResumo[ref].s) {
+        wsResumo[ref].s = estiloCelula(branco);
+      }
+    }
+
+    // =========================
+    // ABA ITENS
+    // =========================
+    const itens = [
+      [
+        "Item",
+        "Identificação",
+        "Qtd",
+        "Comp (m)",
+        "Larg (m)",
+        "Alt (m)",
+        "Peso Unit. (kg)",
+        "Peso Total (kg)",
+        "Volume (m³)",
+      ],
+    ];
+
+    listaCarga.forEach((item) => {
+      itens.push([
+        item.id,
+        item.nome,
+        item.qtd,
+        item.comp,
+        item.larg,
+        item.alt,
+        item.peso,
+        item.pesoTotal,
+        item.volume,
+      ]);
+    });
+
+    const wsItens = XLSX.utils.aoa_to_sheet(itens);
+    wsItens["!cols"] = [
+      { wch: 8 },
+      { wch: 25 },
+      { wch: 8 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+    ];
+    wsItens["!autofilter"] = { ref: wsItens["!ref"] };
+    aplicarEstilo(wsItens, wsItens["!ref"]);
+
+    // =========================
+    // ABA VEÍCULOS
+    // =========================
+    const veiculos = [
+      [
+        "Veículo",
+        "Peso Ocupado",
+        "Peso Máximo",
+        "% Peso",
+        "Volume Ocupado",
+        "Volume Máximo",
+        "% Volume",
+        "Área Ocupada",
+        "Área Máxima",
+      ],
+    ];
+
+    cargas.forEach((carga, index) => {
+      const v = carga.veiculo;
+      const volMax = v.compFisico * v.largFisica * v.altFisica;
+      const areaMax = v.compFisico * v.largFisica;
+      const areaOcupada = Math.min(carga.areaAtual || 0, areaMax);
+
+      veiculos.push([
+        `Veículo ${index + 1} - ${v.nome}`,
+        formatarBR(carga.pesoAtual) + " kg",
+        formatarBR(v.pesoMax) + " kg",
+        ((carga.pesoAtual / v.pesoMax) * 100).toFixed(0) + "%",
+        formatarBR(carga.volumeAtual) + " m³",
+        formatarBR(volMax) + " m³",
+        ((carga.volumeAtual / volMax) * 100).toFixed(0) + "%",
+        formatarBR(areaOcupada) + " m²",
+        formatarBR(areaMax) + " m²",
+      ]);
+    });
+
+    const wsVeiculos = XLSX.utils.aoa_to_sheet(veiculos);
+    wsVeiculos["!cols"] = [
+      { wch: 30 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 12 },
+      { wch: 16 },
+      { wch: 16 },
+    ];
+    wsVeiculos["!autofilter"] = { ref: wsVeiculos["!ref"] };
+    aplicarEstilo(wsVeiculos, wsVeiculos["!ref"]);
+
+    // =========================
+    // ABA DISTRIBUIÇÃO
+    // =========================
+    const distribuicao = [
+      [
+        "Veículo",
+        "Item",
+        "Identificação",
+        "Qtd",
+        "Dimensões",
+        "Peso Unit.",
+        "Peso Total",
+      ],
+    ];
+
+    cargas.forEach((carga, index) => {
+      carga.itens.forEach((item) => {
+        distribuicao.push([
+          `Veículo ${index + 1} - ${carga.veiculo.nome}`,
+          item.id,
+          item.nome,
+          item.qtd,
+          `${item.comp.toFixed(2)} x ${item.larg.toFixed(2)} x ${item.alt.toFixed(2)} m`,
+          formatarBR(item.peso) + " kg",
+          formatarBR(item.peso * item.qtd) + " kg",
+        ]);
+      });
+    });
+
+    const wsDistribuicao = XLSX.utils.aoa_to_sheet(distribuicao);
+    wsDistribuicao["!cols"] = [
+      { wch: 30 },
+      { wch: 8 },
+      { wch: 25 },
+      { wch: 8 },
+      { wch: 24 },
+      { wch: 16 },
+      { wch: 16 },
+    ];
+    wsDistribuicao["!autofilter"] = { ref: wsDistribuicao["!ref"] };
+    aplicarEstilo(wsDistribuicao, wsDistribuicao["!ref"]);
+
+    XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+    XLSX.utils.book_append_sheet(wb, wsItens, "Itens da Carga");
+    XLSX.utils.book_append_sheet(wb, wsVeiculos, "Frota");
+    XLSX.utils.book_append_sheet(wb, wsDistribuicao, "Distribuicao");
+
+    // =========================
+    // ABA PERSONALIZADO (só existe se algum veículo estiver
+    // com a aba Personalizado ativa no momento da exportação)
+    // =========================
+    const personalizadoLinhas = [
+      [
+        "Veículo",
+        "Caixa",
+        "Zona",
+        "Posição X (m)",
+        "Posição Y (m)",
+        "Comprimento usado (m)",
+        "Largura usado (m)",
+        "Girada",
+        "Peso (kg)",
+      ],
+    ];
+
+    Object.keys(avaliacoesPersonalizadoPorViagem).forEach((numeroVeiculo) => {
+      const painel = document.getElementById(
+        `painel-personalizado-${numeroVeiculo}`,
+      );
+
+      const ativo = painel && painel.classList.contains("painel-aba-ativa");
+      if (!ativo) return;
+
+      const caixas = caixasPersonalizadasPorViagem[numeroVeiculo] || [];
+
+      caixas.forEach((c) => {
+        const girada = Math.abs(c.compRender - c.comp) > 0.01;
+
+        personalizadoLinhas.push([
+          `Veículo ${numeroVeiculo}`,
+          c.nome,
+          c.zona === "espera" ? "Área de Espera" : "No veículo",
+          c.zona === "espera" ? "" : c.X_Fisico.toFixed(2),
+          c.zona === "espera" ? "" : c.Y_Fisico.toFixed(2),
+          c.compRender.toFixed(2),
+          c.largRender.toFixed(2),
+          girada ? "Sim" : "Não",
+          formatarBR(c.pesoBloco),
+        ]);
+      });
+
+      const avaliacao = avaliacoesPersonalizadoPorViagem[numeroVeiculo];
+
+      personalizadoLinhas.push(["", "", "", "", "", "", "", "", ""]);
+
+      personalizadoLinhas.push([
+        `Avaliação do Veículo ${numeroVeiculo}: ${avaliacao.nivel.toUpperCase()}`,
+        avaliacao.mensagens.join(" "),
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+      ]);
+    });
+
+    if (personalizadoLinhas.length > 1) {
+      const wsPersonalizado = XLSX.utils.aoa_to_sheet(personalizadoLinhas);
+      wsPersonalizado["!cols"] = [
+        { wch: 14 },
+        { wch: 22 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 20 },
+        { wch: 20 },
+        { wch: 10 },
+        { wch: 14 },
+      ];
+      wsPersonalizado["!autofilter"] = { ref: wsPersonalizado["!ref"] };
+      aplicarEstilo(wsPersonalizado, wsPersonalizado["!ref"]);
+
+      XLSX.utils.book_append_sheet(wb, wsPersonalizado, "Personalizado");
+    }
+
+    XLSX.writeFile(wb, "Romaneio_" + codigoSimulacao + ".xlsx");
+  } catch (e) {
+    console.error("Erro:", e);
+    alert("Erro na exportação: " + e.message);
+  }
+}
+
+// =====================================================
+// EXPORTAÇÃO DE RELATÓRIOS
+// =====================================================
+
+async function gerarRelatorioPDF() {
+
+  const selo = document.getElementById("selo-compatibilidade");
+const textoSelo = selo?.textContent.trim() || "";
+
+const cargaAprovada =
+  selo &&
+  selo.style.display !== "none" &&
+  textoSelo.includes("CARGA APROVADA");
+
+const atencaoRegulatoria =
+  selo &&
+  selo.style.display !== "none" &&
+  textoSelo.includes("ATENÇÃO REGULATÓRIA");
+
+const distribuicaoAtencao =
+  selo &&
+  selo.style.display !== "none" &&
+  textoSelo.includes("ATENÇÃO À DISTRIBUIÇÃO DA CARGA");
+
+const distribuicaoCritica =
+  selo &&
+  selo.style.display !== "none" &&
+  (textoSelo.includes("DISTRIBUIÇÃO CRÍTICA DA CARGA") ||
+    textoSelo.includes("DISTRIBUIÇÃO LATERAL CRÍTICA DA CARGA"));
+
+const operacaoNaoCompativel =
+  textoSelo.includes("OPERAÇÃO NÃO COMPATÍVEL");
+
+// Outros avisos de ATENÇÃO que o selo pode mostrar (distribuição lateral,
+// concentração longitudinal e limite operacional). Não são bloqueios.
+const avisoComplementar = obterAvisoComplementarDoSelo(
+  selo && selo.style.display !== "none" ? textoSelo : "",
+);
+
+let avisoC3 = ressalvaCgAtual || avisoComplementar;
+
+// Mesma lógica do Excel: para cada veículo com a aba
+// Personalizado ativa, usa a avaliação ao vivo em vez do
+// automático — o pior caso entre os veículos decide o status.
+let personalizadoCritico = false;
+let personalizadoIncompleto = false;
+let personalizadoAtencao = false;
+
+Object.keys(avaliacoesPersonalizadoPorViagem).forEach((numeroVeiculo) => {
+  const painel = document.getElementById(
+    `painel-personalizado-${numeroVeiculo}`,
+  );
+
+  const ativo = painel && painel.classList.contains("painel-aba-ativa");
+  if (!ativo) return;
+
+  const avaliacao = avaliacoesPersonalizadoPorViagem[numeroVeiculo];
+  if (!avaliacao) return;
+
+  if (avaliacao.nivel === "critico") personalizadoCritico = true;
+  else if (avaliacao.nivel === "incompleto") personalizadoIncompleto = true;
+  else if (avaliacao.nivel === "atencao") personalizadoAtencao = true;
+});
+
+const criticoAutomatico = resolverCriticoAutomatico(!!distribuicaoCritica);
+
+if (criticoAutomatico.pendente || personalizadoCritico) {
+  alert(
+    personalizadoCritico
+      ? "O PDF não pode ser gerado: o arranjo manual (aba Personalizado) de um ou mais veículos foi classificado como CRÍTICO. Revise a distribuição antes de exportar."
+      : "O PDF não pode ser gerado porque a distribuição da carga foi classificada como CRÍTICA. Revise o posicionamento da carga antes de prosseguir. Se preferir, monte um arranjo manual na aba Personalizado do veículo e deixe-o adequado antes de exportar.",
+  );
+
+  return;
+}
+
+if (personalizadoIncompleto) {
+  alert(
+    "O PDF não pode ser gerado: existem caixas na Área de Espera (fora do veículo) em um ou mais veículos no modo Personalizado. Posicione todas as caixas antes de exportar.",
+  );
+
+  return;
+}
+
+if (
+  operacaoNaoCompativel ||
+  (!cargaAprovada &&
+    !atencaoRegulatoria &&
+    !distribuicaoAtencao &&
+    !avisoComplementar &&
+    !criticoAutomatico.substituidoPeloManual)
+) {
+  alert(
+    "O PDF não pode ser gerado porque a operação não está compatível.",
+  );
+
+  return;
+}
+
+let statusRelatorio = "STATUS: CARGA APROVADA";
+let corStatusRelatorio = [0, 128, 0];
+
+if (atencaoRegulatoria) {
+  statusRelatorio =
+    "STATUS: ATENÇÃO REGULATÓRIA — VERIFIQUE A NECESSIDADE DE AET";
+
+  corStatusRelatorio = [180, 83, 9];
+}
+
+if (distribuicaoAtencao) {
+  statusRelatorio =
+    "STATUS: ATENÇÃO À DISTRIBUIÇÃO DA CARGA";
+
+  corStatusRelatorio = [180, 83, 9];
+}
+
+if (criticoAutomatico.substituidoPeloManual) {
+  avisoC3 = montarAvisoCriticoSubstituido(criticoAutomatico.veiculosSubstituidos);
+
+  if (!personalizadoAtencao) {
+    statusRelatorio = "STATUS: ARRANJO MANUAL APROVADO";
+
+    corStatusRelatorio = [180, 83, 9];
+  }
+}
+
+if (avisoComplementar) {
+  statusRelatorio = avisoComplementar.statusPdf;
+
+  corStatusRelatorio = [180, 83, 9];
+}
+
+if (personalizadoAtencao && statusRelatorio === "STATUS: CARGA APROVADA") {
+  statusRelatorio =
+    "STATUS: ATENÇÃO À DISTRIBUIÇÃO DA CARGA (ARRANJO MANUAL)";
+
+  corStatusRelatorio = [180, 83, 9];
+}
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ compress: true });
+
+  const agora = new Date();
+  const codigoSimulacao =
+    "DCPRO-" +
+    agora.getFullYear() +
+    String(agora.getMonth() + 1).padStart(2, "0") +
+    String(agora.getDate()).padStart(2, "0") +
+    "-" +
+    String(agora.getHours()).padStart(2, "0") +
+    String(agora.getMinutes()).padStart(2, "0") +
+    String(agora.getSeconds()).padStart(2, "0");
+
+  const rows = document.querySelectorAll("#tabela-carga tbody tr");
+
+  let listaCarga = [];
+  let pesoTotal = 0;
+  let volumeTotal = 0;
+
+  rows.forEach((tr, index) => {
+    const nome = tr.querySelector(".nome")?.value || `Item ${index + 1}`;
+    const qtd = parseInt(tr.querySelector(".qtd")?.value) || 0;
+
+    const comp =
+      (parseFloat(
+        tr.querySelector(".comp")?.value.replace(/\./g, "").replace(",", "."),
+      ) || 0) / 100;
+    const larg =
+      (parseFloat(
+        tr.querySelector(".larg")?.value.replace(/\./g, "").replace(",", "."),
+      ) || 0) / 100;
+    const alt =
+      (parseFloat(
+        tr.querySelector(".alt")?.value.replace(/\./g, "").replace(",", "."),
+      ) || 0) / 100;
+
+    const peso =
+      Number(
+        tr.querySelector(".peso")?.value.replace(/\./g, "").replace(",", "."),
+      ) || 0;
+
+    pesoTotal += peso * qtd;
+    volumeTotal += comp * larg * alt * qtd;
+
+    listaCarga.push({
+      id: index + 1,
+      nome,
+      qtd,
+      comp,
+      larg,
+      alt,
+      peso,
+      cor: coresItens[index % coresItens.length],
+    });
+  });
+
+  const cargas = ultimaFrotaCalculada;
+
+  // =========================
+  // CAPA / CABEÇALHO
+  // =========================
+  doc.setFontSize(18);
+  doc.setTextColor(30, 58, 138);
+  doc.setFont(undefined, "bold");
+  doc.text("DIMENSIONADOR DE CARGA PRO", 105, 18, { align: "center" });
+
+  doc.setFontSize(11);
+  doc.setFont(undefined, "normal");
+  doc.setTextColor(90);
+  doc.text("Relatório Operacional de Carga", 105, 26, { align: "center" });
+  doc.text("Data da Simulação: " + agora.toLocaleString(), 105, 34, {
+    align: "center",
+  });
+  doc.text("Código da Simulação: " + codigoSimulacao, 105, 41, {
+    align: "center",
+  });
+
+  doc.line(20, 48, 190, 48);
+
+  // =========================
+  // RESUMO GERAL
+  // =========================
+  doc.setFontSize(13);
+  doc.setTextColor(30, 58, 138);
+  doc.setFont(undefined, "bold");
+  doc.text("Resumo Geral da Carga", 20, 58);
+
+  doc.setFontSize(10);
+  doc.setTextColor(0);
+  doc.setFont(undefined, "normal");
+
+  doc.text(`Peso Total: ${formatarBR(pesoTotal)} kg`, 20, 67);
+  doc.text(`Volume Total: ${formatarBR(volumeTotal)} m³`, 20, 74);
+  doc.text(`Total de Itens: ${listaCarga.length}`, 20, 81);
+  doc.text(`Quantidade de Veículos: ${cargas.length}`, 20, 88);
+
+  doc.setFontSize(atencaoRegulatoria ? 11 : 14);
+doc.setTextColor(
+  corStatusRelatorio[0],
+  corStatusRelatorio[1],
+  corStatusRelatorio[2],
+);
+doc.setFont(undefined, "bold");
+doc.text(statusRelatorio, 105, 102, { align: "center" });
+
+  doc.line(20, 110, 190, 110);
+
+  // =========================
+  // TABELA DE ITENS
+  // =========================
+  const tableBody = listaCarga.map((item) => [
+    item.id,
+    item.nome,
+    item.qtd,
+    `${item.comp.toFixed(2)} x ${item.larg.toFixed(2)} x ${item.alt.toFixed(2)} m`,
+    `${formatarBR(item.peso)} kg`,
+    `${formatarBR(item.peso * item.qtd)} kg`,
+  ]);
+
+  doc.autoTable({
+    startY: 118,
+    head: [
+      ["Item", "Identificação", "Qtd", "Dimensões", "Peso Unit.", "Peso Total"],
+    ],
+    body: tableBody,
+    headStyles: { fillColor: [30, 58, 138] },
+    theme: "grid",
+    styles: { fontSize: 8 },
+  });
+
+  let y = doc.lastAutoTable.finalY + 12;
+
+  // =========================
+  // LAYOUT VISUAL DA CARGA
+  // =========================
+  const blocosVeiculos = document.querySelectorAll(".bloco-veiculo");
+
+  if (blocosVeiculos.length > 0) {
+    doc.addPage();
+
+    doc.setFontSize(15);
+    doc.setTextColor(30, 58, 138);
+    doc.setFont(undefined, "bold");
+    doc.text("Layout Visual da Carga", 105, 18, { align: "center" });
+
+    let yLayout = 30;
+
+    for (let i = 0; i < blocosVeiculos.length; i++) {
+      const bloco = blocosVeiculos[i];
+      const carga = cargas[i];
+
+      if (yLayout > 220) {
+        doc.addPage();
+        yLayout = 20;
+      }
+
+      const alvoImagem = bloco;
+
+      // Escala 2 + JPEG: o layout ocupa 166 mm na página, então
+      // mais resolução que isso só aumenta o arquivo (antes: PNG
+      // com canal alfa em escala 3, cerca de 50 MB para 2 páginas).
+      const canvas = await html2canvas(alvoImagem, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+      });
+
+      const imgData = canvas.toDataURL("image/jpeg", 0.88);
+
+      const imgWidth = 170;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      if (yLayout + imgHeight > 275) {
+        doc.addPage();
+        yLayout = 20;
+      }
+
+      doc.setDrawColor(203, 213, 225);
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(20, yLayout - 2, 170, imgHeight + 4, 2, 2, "FD");
+
+      doc.addImage(imgData, "JPEG", 22, yLayout, 166, imgHeight);
+
+      yLayout += imgHeight + 14;
+    }
+
+    y = yLayout;
+  }
+
+  // =========================
+  // OBSERVAÇÕES
+  // =========================
+  if (y > 230) {
+    doc.addPage();
+    y = 20;
+  }
+
+  doc.setFontSize(10);
+  doc.setTextColor(70);
+  doc.setFont(undefined, "bold");
+  doc.text("Observações Técnicas", 20, y);
+
+  doc.setFont(undefined, "normal");
+  doc.text(
+    "- Relatório gerado automaticamente pelo Dimensionador de Carga Pro.",
+    20,
+    y + 8,
+  );
+  doc.text(
+    "- A projeção é matemática e não substitui a conferência técnica presencial.",
+    20,
+    y + 15,
+  );
+  doc.text(
+    "- A acomodação final deve respeitar amarração, distribuição de peso e legislação vigente.",
+    20,
+    y + 22,
+  );
+
+  if (avisoC3) {
+  doc.setFont(undefined, "bold");
+
+  doc.text(
+    `- C3 / Distribuição da carga: ${avisoC3.titulo}`,
+    20,
+    y + 31,
+  );
+
+  doc.setFont(undefined, "normal");
+
+  const textoRessalvaCg = doc.splitTextToSize(
+    avisoC3.mensagem,
+    165,
+  );
+
+  doc.text(
+    textoRessalvaCg,
+    20,
+    y + 38,
+  );
+}
+
+  // =========================
+  // ASSINATURAS
+  // =========================
+  y += avisoC3 ? 65 : 45;
+
+  if (y > 260) {
+    doc.addPage();
+    y = 220;
+  }
+
+  doc.line(20, y, 90, y);
+  doc.text("Assinatura do Motorista", 20, y + 6);
+
+  doc.line(120, y, 190, y);
+  doc.text("Assinatura do Conferente", 120, y + 6);
+
+  // RODAPÉ
+  doc.setFontSize(8);
+  doc.setTextColor(120);
+  doc.text("DCPRO - Relatório gerado automaticamente.", 105, 285, {
+    align: "center",
+  });
+
+  doc.save("Relatorio_" + codigoSimulacao + ".pdf");
+}
+
+function limparTudo() {
+  const confirmou = confirm(
+    "Tem certeza que deseja apagar todos os itens da tabela? Essa ação não pode ser desfeita.",
+  );
+
+  if (!confirmou) {
+    return;
+  }
+
+  localStorage.removeItem("dcpro_carga");
+
+  const tbody = document.querySelector("#tabela-carga tbody");
+  tbody.innerHTML = "";
+
+  document.getElementById("bloco-resultados").style.display = "none";
+  document.getElementById("bloco-mapa").style.display = "none";
+  document.getElementById("alerta-frota").style.display = "none";
+  document.getElementById("sugestao-frota").style.display = "none";
+
+  const alertaAET = document.getElementById("alerta-aet");
+
+if (alertaAET) {
+  alertaAET.style.display = "none";
+  alertaAET.innerHTML = "";
+}
+
+  document.getElementById("selo-compatibilidade").style.display = "none";
+  document.getElementById("btn-gerar-pdf").style.display = "none";
+  document.getElementById("btn-excel").style.display = "none";
+
+  document.getElementById("container-veiculos").innerHTML = "";
+  document.getElementById("bar-peso").style.width = "0%";
+  document.getElementById("bar-peso").innerText = "0%";
+  document.getElementById("txt-vol").innerText = "0";
+  document.getElementById("max-vol").innerText = "0";
+  document.getElementById("bar-vol").style.width = "0%";
+  document.getElementById("bar-vol").innerText = "0%";
+
+  // Não é mais necessário.
+  // Cada veículo cria sua própria faixa de dimensões.
+  globalEstorouMetragem = false;
+  ultimaFrotaCalculada = [];
+
+// Limpar veículo personalizado
+document.getElementById("vp-nome").value = "";
+document.getElementById("vp-peso").value = "";
+document.getElementById("vp-comp").value = "";
+document.getElementById("vp-larg").value = "";
+document.getElementById("vp-alt").value = "";
+document.getElementById("vp-qtd").value = 1;
+
+// Limpa também o LocalStorage
+localStorage.removeItem("dcpro_veiculo_personalizado");
+
+  adicionarLinha(false);
+  const aviso = document.getElementById("avisoItensIncompletos");
+  if (aviso) aviso.style.display = "none";
+}
+
+// =====================================================
+// LOCAL STORAGE
+// =====================================================
+
+function salvarCarga() {
+  const itens = [];
+
+  document.querySelectorAll("#tabela-carga tbody tr").forEach((linha) => {
+    itens.push({
+      crachaId: linha.dataset.itemId || "",
+      nome: linha.querySelector(".nome")?.value || "",
+      qtd: linha.querySelector(".qtd")?.value || "",
+      comp: linha.querySelector(".comp")?.value || "",
+      larg: linha.querySelector(".larg")?.value || "",
+      alt: linha.querySelector(".alt")?.value || "",
+      peso: linha.querySelector(".peso")?.value || "",
+    });
+  });
+
+  localStorage.setItem("dcpro_carga", JSON.stringify(itens));
+}
+
+// Dados salvos no navegador podem ficar corrompidos (escrita interrompida,
+// edição manual, versão antiga). Isso nunca pode impedir a página de abrir:
+// o dado inválido é descartado e o DCPRO começa limpo.
+function lerJsonSalvo(chave, padrao) {
+  const bruto = localStorage.getItem(chave);
+
+  if (bruto === null) {
+    return padrao;
+  }
+
+  try {
+    const dados = JSON.parse(bruto);
+
+    if (
+      dados === null ||
+      typeof dados !== "object" ||
+      Array.isArray(dados) !== Array.isArray(padrao)
+    ) {
+      throw new Error("formato inesperado");
+    }
+
+    if (Array.isArray(dados)) {
+      return dados.filter(
+        (item) => item && typeof item === "object" && !Array.isArray(item),
+      );
+    }
+
+    return dados;
+  } catch (erro) {
+    try {
+      localStorage.removeItem(chave);
+    } catch (e) {
+      // sem acesso ao armazenamento: segue com o padrão
+    }
+
+    return padrao;
+  }
+}
+
+// Cada entrada do histórico precisa ter data, veículo e uma lista de itens.
+// Entradas fora do formato são descartadas em vez de quebrar a tela.
+function lerHistorico() {
+  return lerJsonSalvo("dcpro_historico", [])
+    .filter((entrada) => Array.isArray(entrada.itens))
+    .map((entrada) => ({
+      data: String(entrada.data ?? "").slice(0, 40),
+      veiculo: String(entrada.veiculo ?? "").slice(0, 80),
+      itens: entrada.itens
+        .filter((item) => item && typeof item === "object" && !Array.isArray(item))
+        .slice(0, 2000),
+    }));
+}
+
+function carregarCargaSalva() {
+  const tbody = document.querySelector("#tabela-carga tbody");
+  tbody.innerHTML = "";
+
+  const itens = lerJsonSalvo("dcpro_carga", []).slice(0, 2000);
+
+  if (itens.length === 0) {
+    adicionarLinha(false);
+    return;
+  }
+
+  const texto = (valor, maximo) =>
+    valor === null || valor === undefined || typeof valor === "object"
+      ? ""
+      : String(valor).slice(0, maximo);
+
+  itens.forEach((item) => {
+    adicionarLinha(false, false);
+
+    const linha = document.querySelector("#tabela-carga tbody tr:last-child");
+
+    if (item.crachaId) {
+      linha.dataset.itemId = item.crachaId;
+
+      const idNumerico = parseInt(item.crachaId, 10);
+
+      if (!isNaN(idNumerico) && idNumerico >= proximoIdItem) {
+        proximoIdItem = idNumerico + 1;
+      }
+    }
+
+    linha.querySelector(".nome").value = texto(item.nome, 200);
+    linha.querySelector(".qtd").value = texto(item.qtd, 12) || "1";
+    linha.querySelector(".comp").value = texto(item.comp, 30);
+    linha.querySelector(".larg").value = texto(item.larg, 30);
+    linha.querySelector(".alt").value = texto(item.alt, 30);
+    linha.querySelector(".peso").value = texto(item.peso, 30);
+  });
+
+  atualizarLabelsEcores();
+}
+
+// =====================================================
+// HISTÓRICO DE CÁLCULOS RECENTES
+// =====================================================
+
+function salvarNoHistorico() {
+  const itens = [];
+
+  document.querySelectorAll("#tabela-carga tbody tr").forEach((linha) => {
+    itens.push({
+      nome: linha.querySelector(".nome")?.value || "",
+      qtd: linha.querySelector(".qtd")?.value || "",
+      comp: linha.querySelector(".comp")?.value || "",
+      larg: linha.querySelector(".larg")?.value || "",
+      alt: linha.querySelector(".alt")?.value || "",
+      peso: linha.querySelector(".peso")?.value || "",
+    });
+  });
+
+  const selectVeiculo = document.getElementById("select-veiculo");
+  const veiculoTexto = selectVeiculo
+    ? selectVeiculo.options[selectVeiculo.selectedIndex]?.text || ""
+    : "";
+
+  const historico = lerHistorico();
+
+  const ultimaEntrada = historico[0];
+  const mesmoConteudo =
+    ultimaEntrada &&
+    JSON.stringify(ultimaEntrada.itens) === JSON.stringify(itens);
+
+  if (!mesmoConteudo) {
+    historico.unshift({
+      data: new Date().toLocaleString("pt-BR"),
+      itens,
+      veiculo: veiculoTexto,
+    });
+  }
+
+  while (historico.length > 10) {
+    historico.pop();
+  }
+
+  localStorage.setItem("dcpro_historico", JSON.stringify(historico));
+}
+
+// =====================================================
+// EXPORTAR / IMPORTAR CARGA EM ARQUIVO JSON
+// =====================================================
+
+function exportarCargaJSON() {
+  const itens = [];
+
+  document.querySelectorAll("#tabela-carga tbody tr").forEach((linha) => {
+    itens.push({
+      nome: linha.querySelector(".nome")?.value || "",
+      qtd: linha.querySelector(".qtd")?.value || "",
+      comp: linha.querySelector(".comp")?.value || "",
+      larg: linha.querySelector(".larg")?.value || "",
+      alt: linha.querySelector(".alt")?.value || "",
+      peso: linha.querySelector(".peso")?.value || "",
+    });
+  });
+
+  if (itens.length === 0) {
+    alert("Não há itens na tabela para exportar.");
+    return;
+  }
+
+  const conteudo = JSON.stringify(itens, null, 2);
+  const blob = new Blob([conteudo], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const dataFormatada = new Date()
+    .toLocaleDateString("pt-BR")
+    .split("/")
+    .reverse()
+    .join("-");
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `carga-dcpro-${dataFormatada}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
+}
+
+function importarCargaJSON(evento) {
+  const arquivo = evento.target.files[0];
+  evento.target.value = "";
+
+  if (!arquivo) {
+    return;
+  }
+
+  const leitor = new FileReader();
+
+  leitor.onerror = function () {
+    alert("Não foi possível ler esse arquivo.");
+  };
+
+  leitor.onload = function (leituraEvento) {
+    let dados;
+
+    try {
+      dados = JSON.parse(leituraEvento.target.result);
+    } catch (erro) {
+      alert("Não foi possível ler esse arquivo. Confira se é um JSON exportado pelo DCPRO.");
+      return;
+    }
+
+    if (!Array.isArray(dados) || dados.length === 0) {
+      alert("Esse arquivo não contém itens válidos para importar.");
+      return;
+    }
+
+    // Só entram itens no formato de objeto. O resto é descartado ANTES de
+    // mexer na tabela, para um arquivo com defeito não apagar a carga atual.
+    const itensValidos = dados.filter(
+      (item) => item && typeof item === "object" && !Array.isArray(item),
+    );
+
+    if (itensValidos.length === 0) {
+      alert("Esse arquivo não contém itens válidos para importar.");
+      return;
+    }
+
+    const LIMITE_ITENS = 2000;
+    const itens = itensValidos.slice(0, LIMITE_ITENS);
+
+    const texto = (valor, maximo) =>
+      valor === null || valor === undefined || typeof valor === "object"
+        ? ""
+        : String(valor).slice(0, maximo);
+
+    const tbody = document.querySelector("#tabela-carga tbody");
+    tbody.innerHTML = "";
+
+    itens.forEach((item) => {
+      adicionarLinha(false, false);
+
+      const linha = tbody.querySelector("tr:last-child");
+
+      linha.querySelector(".nome").value = texto(item.nome, 200);
+      linha.querySelector(".qtd").value = texto(item.qtd, 12) || "1";
+      linha.querySelector(".comp").value = texto(item.comp, 30);
+      linha.querySelector(".larg").value = texto(item.larg, 30);
+      linha.querySelector(".alt").value = texto(item.alt, 30);
+      linha.querySelector(".peso").value = texto(item.peso, 30);
+    });
+
+    atualizarLabelsEcores();
+    salvarCarga();
+
+    const avisos = [];
+    const descartados = dados.length - itensValidos.length;
+
+    if (descartados > 0) {
+      avisos.push(`${descartados} item(ns) fora do formato foram ignorados`);
+    }
+
+    if (itensValidos.length > LIMITE_ITENS) {
+      avisos.push(
+        `o arquivo tem ${itensValidos.length} itens; foram importados os primeiros ${LIMITE_ITENS}`,
+      );
+    }
+
+    if (avisos.length > 0) {
+      alert(`Importação concluída: ${itens.length} item(ns).\n\nAtenção:\n- ` + avisos.join("\n- "));
+    }
+  };
+
+  leitor.readAsText(arquivo);
+}
+
+// =====================================================
+// IMPORTAR EXCEL (.xlsx / .xls)
+//
+// Lê somente: Caixa/Base/Palet, Quantidade, Comprimento,
+// Largura, Altura e Peso. Encontra o cabeçalho sozinho,
+// em qualquer linha ou coluna da planilha.
+// =====================================================
+
+function normalizarCabecalhoPlanilha(valor) {
+  return String(valor ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\(.*?\)/g, " ")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function classificarCabecalhoPlanilha(valor) {
+  const bruto = String(valor ?? "").trim();
+
+  if (!bruto || bruto.length > 40) {
+    return null;
+  }
+
+  const t = normalizarCabecalhoPlanilha(bruto);
+
+  if (!t) {
+    return null;
+  }
+
+  const comeca = (...p) => p.some((x) => t.startsWith(x));
+  const tem = (...p) => p.some((x) => t.includes(x));
+  const igual = (...p) => p.includes(t);
+
+  if (comeca("quant", "qtd", "qde", "numerode", "nde", "nro")) {
+    return { campo: "qtd", prioridade: tem("total") ? 0 : 1 };
+  }
+
+  if (comeca("peso", "weight") || igual("kg")) {
+    let prioridade = 2;
+
+    if (tem("unit")) prioridade = 4;
+    else if (tem("bruto")) prioridade = 3;
+    else if (tem("liq")) prioridade = 1;
+
+    if (tem("tot")) prioridade = 0;
+
+    return { campo: "peso", prioridade, total: prioridade === 0 };
+  }
+
+  if (comeca("comprimento", "compr", "length") || igual("comp", "c", "cmp")) {
+    return { campo: "comp", prioridade: 1 };
+  }
+
+  if (comeca("largura", "width") || igual("larg", "l", "lg")) {
+    return { campo: "larg", prioridade: 1 };
+  }
+
+  if (comeca("altura", "height") || igual("alt", "a", "h")) {
+    return { campo: "alt", prioridade: 1 };
+  }
+
+  // Coluna única com as três medidas (ex.: 120x80x100 = C x L x A)
+  if (comeca("dimens", "medida") || igual("cxlxa", "cxlxh")) {
+    return { campo: "dim3", prioridade: 1 };
+  }
+
+  if (tem("caixa", "base", "palet", "pallet")) {
+    return { campo: "nome", prioridade: 3 };
+  }
+
+  if (
+    tem(
+      "descri",
+      "identific",
+      "produto",
+      "material",
+      "mercadoria",
+      "nome",
+      "tipo",
+      "embalagem",
+    )
+  ) {
+    return { campo: "nome", prioridade: 2 };
+  }
+
+  if (igual("item", "ref", "referencia", "codigo", "cod", "sku")) {
+    return { campo: "nome", prioridade: 1 };
+  }
+
+  return null;
+}
+
+function escolherMelhorColunaPlanilha(candidatos) {
+  return [...candidatos].sort(
+    (a, b) => b.prioridade - a.prioridade || a.indice - b.indice,
+  )[0];
+}
+
+function encontrarCabecalhoPlanilha(matriz) {
+  let melhor = null;
+  const limite = Math.min(matriz.length, 200);
+
+  for (let r = 0; r < limite; r++) {
+    const linha = matriz[r] || [];
+    const acima = r > 0 ? matriz[r - 1] || [] : [];
+    const candidatos = {};
+
+    linha.forEach((celula, c) => {
+      let classe = classificarCabecalhoPlanilha(celula);
+
+      // Cabeçalho em duas linhas (célula mesclada): olha a linha de cima,
+      // mas nunca para o campo de identificação.
+      if (!classe) {
+        const classeAcima = classificarCabecalhoPlanilha(acima[c]);
+
+        if (classeAcima && classeAcima.campo !== "nome") {
+          classe = classeAcima;
+        }
+      }
+
+      if (!classe) return;
+
+      if (!candidatos[classe.campo]) candidatos[classe.campo] = [];
+      candidatos[classe.campo].push({ ...classe, indice: c });
+    });
+
+    const colunas = {};
+
+    Object.keys(candidatos).forEach((campo) => {
+      colunas[campo] = escolherMelhorColunaPlanilha(candidatos[campo]);
+    });
+
+    const dimensoesSeparadas = colunas.comp && colunas.larg && colunas.alt;
+
+    if (!dimensoesSeparadas && !colunas.dim3) {
+      continue;
+    }
+
+    // Com colunas separadas de comprimento/largura/altura, a coluna única é ignorada.
+    if (dimensoesSeparadas) {
+      delete colunas.dim3;
+    }
+
+    // Em empate, prefere a interpretação com colunas separadas.
+    const pontuacao = Object.keys(colunas).length - (dimensoesSeparadas ? 0 : 0.5);
+
+    if (!melhor || pontuacao > melhor.pontuacao) {
+      melhor = { linha: r, colunas, pontuacao };
+    }
+  }
+
+  // Sem coluna de identificação na linha do cabeçalho:
+  // tenta a linha logo acima (cabeçalho em duas linhas).
+  if (melhor && !melhor.colunas.nome && melhor.linha > 0) {
+    const acima = matriz[melhor.linha - 1] || [];
+    const candidatos = [];
+
+    acima.forEach((celula, c) => {
+      const classe = classificarCabecalhoPlanilha(celula);
+
+      if (classe && classe.campo === "nome") {
+        candidatos.push({ ...classe, indice: c });
+      }
+    });
+
+    if (candidatos.length > 0) {
+      melhor.colunas.nome = escolherMelhorColunaPlanilha(candidatos);
+    }
+  }
+
+  return melhor;
+}
+
+function detectarFatorComprimentoPlanilha(texto) {
+  const t = String(texto ?? "").toLowerCase();
+
+  if (/\(\s*mm\s*\)|\bmm\b|milimetro/.test(t)) return 0.1;
+  if (/\(\s*m\s*\)|\bmetros?\b|\bmts?\b/.test(t)) return 100;
+  if (/\(\s*cm\s*\)|\bcm\b|centimetro/.test(t)) return 1;
+
+  return null;
+}
+
+function detectarFatorPesoPlanilha(texto) {
+  const t = String(texto ?? "").toLowerCase();
+
+  if (/\(\s*g\s*\)|\bgramas?\b/.test(t)) return 0.001;
+  if (/\(\s*t\s*\)|\btoneladas?\b|\bton\b/.test(t)) return 1000;
+
+  return null;
+}
+
+function lerNumeroPlanilha(valor) {
+  if (typeof valor === "number") {
+    return Number.isFinite(valor) ? valor : NaN;
+  }
+
+  if (valor === null || valor === undefined) {
+    return NaN;
+  }
+
+  const achado = String(valor).match(/\d[\d.,]*/);
+
+  if (!achado) {
+    return NaN;
+  }
+
+  let s = achado[0];
+  const temPonto = s.includes(".");
+  const temVirgula = s.includes(",");
+
+  if (temPonto && temVirgula) {
+    // O último separador é o decimal.
+    if (s.lastIndexOf(",") > s.lastIndexOf(".")) {
+      s = s.replace(/\./g, "").replace(",", ".");
+    } else {
+      s = s.replace(/,/g, "");
+    }
+  } else if (temVirgula) {
+    s = s.split(",").length > 2 ? s.replace(/,/g, "") : s.replace(",", ".");
+  } else if (temPonto && /^\d{1,3}(\.\d{3})+$/.test(s)) {
+    // "1.350" = mil trezentos e cinquenta (mesmo padrão dos campos do DCPRO)
+    s = s.replace(/\./g, "");
+  }
+
+  const numero = parseFloat(s);
+
+  return Number.isFinite(numero) ? numero : NaN;
+}
+
+function lerDimensoesPlanilha(valor) {
+  const achado = String(valor ?? "").match(
+    /(\d[\d.,]*)\s*[x×*]\s*(\d[\d.,]*)\s*[x×*]\s*(\d[\d.,]*)/i,
+  );
+
+  if (!achado) {
+    return { comp: NaN, larg: NaN, alt: NaN };
+  }
+
+  return {
+    comp: lerNumeroPlanilha(achado[1]),
+    larg: lerNumeroPlanilha(achado[2]),
+    alt: lerNumeroPlanilha(achado[3]),
+  };
+}
+
+function analisarMatrizPlanilha(matriz) {
+  // Garante que toda linha é uma lista (o leitor de Excel já entrega assim,
+  // mas um arquivo estranho não pode derrubar a análise).
+  matriz = (Array.isArray(matriz) ? matriz : []).map((linha) =>
+    Array.isArray(linha) ? linha : [],
+  );
+
+  const cabecalho = encontrarCabecalhoPlanilha(matriz);
+
+  if (!cabecalho) {
+    return null;
+  }
+
+  const { linha: linhaCab, colunas } = cabecalho;
+  const linhaTitulos = matriz[linhaCab] || [];
+  const linhaAcima = linhaCab > 0 ? matriz[linhaCab - 1] || [] : [];
+
+  const textoDoCabecalho = (campo) => {
+    const coluna = colunas[campo];
+
+    if (!coluna) return "";
+
+    return `${linhaTitulos[coluna.indice] ?? ""} ${linhaAcima[coluna.indice] ?? ""}`;
+  };
+
+  const dimensaoUnica = !(colunas.comp && colunas.larg && colunas.alt);
+  const colunaUnidade = (campo) => (dimensaoUnica ? "dim3" : campo);
+
+  const fatores = {
+    comp: detectarFatorComprimentoPlanilha(textoDoCabecalho(colunaUnidade("comp"))),
+    larg: detectarFatorComprimentoPlanilha(textoDoCabecalho(colunaUnidade("larg"))),
+    alt: detectarFatorComprimentoPlanilha(textoDoCabecalho(colunaUnidade("alt"))),
+  };
+
+  // Unidade escrita em só uma das colunas vale para as três.
+  const fatorInformado = [fatores.comp, fatores.larg, fatores.alt].find(
+    (f) => f !== null,
+  );
+
+  ["comp", "larg", "alt"].forEach((campo) => {
+    if (fatores[campo] === null && fatorInformado !== undefined) {
+      fatores[campo] = fatorInformado;
+    }
+  });
+
+  const fatorPeso = detectarFatorPesoPlanilha(textoDoCabecalho("peso")) ?? 1;
+
+  const avisos = [];
+
+  if (!colunas.peso) avisos.push("não encontrei a coluna de Peso");
+  if (!colunas.qtd) avisos.push("não encontrei a coluna de Quantidade (usei 1)");
+  if (!colunas.nome) avisos.push("não encontrei a coluna Caixa/Base/Palet");
+
+  if (colunas.peso && colunas.peso.total) {
+    avisos.push("o peso veio de uma coluna de peso total e foi dividido pela quantidade");
+  }
+
+  const ler = (linha, campo) =>
+    colunas[campo] ? linha[colunas[campo].indice] : undefined;
+
+  const itens = [];
+  const ignoradas = [];
+  let maiorMedida = 0;
+
+  for (let r = linhaCab + 1; r < matriz.length; r++) {
+    const linha = matriz[r] || [];
+
+    if (linha.every((c) => String(c ?? "").trim() === "")) {
+      continue;
+    }
+
+    const medidas = dimensaoUnica
+      ? lerDimensoesPlanilha(ler(linha, "dim3"))
+      : {
+          comp: lerNumeroPlanilha(ler(linha, "comp")),
+          larg: lerNumeroPlanilha(ler(linha, "larg")),
+          alt: lerNumeroPlanilha(ler(linha, "alt")),
+        };
+
+    const { comp, larg, alt } = medidas;
+
+    if (!(comp > 0 || larg > 0 || alt > 0)) {
+      const ehTotal = linha.some((c) =>
+        normalizarCabecalhoPlanilha(c).includes("total"),
+      );
+
+      if (!ehTotal) ignoradas.push(r);
+
+      continue;
+    }
+
+    let qtd = 1;
+
+    if (colunas.qtd) {
+      const q = lerNumeroPlanilha(ler(linha, "qtd"));
+
+      if (q === 0) {
+        ignoradas.push(r);
+        continue;
+      }
+
+      if (q > 0) qtd = Math.max(1, Math.round(q));
+    }
+
+    let peso = lerNumeroPlanilha(ler(linha, "peso")) * fatorPeso;
+
+    if (colunas.peso && colunas.peso.total && peso > 0) {
+      peso = peso / qtd;
+    }
+
+    const nome = colunas.nome ? String(ler(linha, "nome") ?? "").trim() : "";
+
+    [comp, larg, alt].forEach((n) => {
+      if (n > maiorMedida) maiorMedida = n;
+    });
+
+    itens.push({ indiceLinha: r, nome, qtd, comp, larg, alt, peso });
+  }
+
+  const unidadeInformada = fatores.comp !== null;
+
+  return {
+    linhaCabecalho: linhaCab,
+    colunas,
+    fatores,
+    itens,
+    ignoradas,
+    avisos,
+    // Sem unidade no cabeçalho e todos os valores pequenos: provavelmente metros.
+    possivelMetros: !unidadeInformada && itens.length > 0 && maiorMedida <= 12,
+  };
+}
+
+function numeroParaCampoPlanilha(n) {
+  // Vazio para valor inválido, infinito ou absurdo (acima de 1 bilhão),
+  // para nunca escrever "Infinity" ou notação científica no campo.
+  if (!(n > 0) || !Number.isFinite(n) || n > 1e9) {
+    return "";
+  }
+
+  // Vírgula como decimal e sem separador de milhar:
+  // é o formato que os campos do DCPRO interpretam corretamente.
+  return String(Math.round(n * 1000) / 1000).replace(".", ",");
+}
+
+function tabelaTemDadosPreenchidos() {
+  return Array.from(document.querySelectorAll("#tabela-carga tbody tr")).some(
+    (tr) =>
+      ["nome", "comp", "larg", "alt", "peso"].some((classe) =>
+        tr.querySelector("." + classe)?.value.trim(),
+      ),
+  );
+}
+
+// Máximo de linhas lidas por aba (acima disso a tela fica lenta).
+const LIMITE_LINHAS_PLANILHA = 2000;
+
+function importarCargaExcel(evento) {
+  const arquivo = evento.target.files[0];
+  evento.target.value = "";
+
+  if (!arquivo) {
+    return;
+  }
+
+  if (typeof XLSX === "undefined") {
+    alert(
+      "A biblioteca de leitura de Excel não foi carregada. Verifique a conexão com a internet e recarregue a página.",
+    );
+    return;
+  }
+
+  const leitor = new FileReader();
+
+  leitor.onerror = function () {
+    alert("Não foi possível ler esse arquivo.");
+  };
+
+  leitor.onload = function (leituraEvento) {
+    let planilha;
+
+    try {
+      planilha = XLSX.read(new Uint8Array(leituraEvento.target.result), {
+        type: "array",
+      });
+    } catch (erro) {
+      alert(
+        "Não foi possível abrir esse arquivo. Confira se é uma planilha Excel (.xlsx ou .xls) válida.",
+      );
+      return;
+    }
+
+    const analises = [];
+
+    planilha.SheetNames.forEach((nomeAba) => {
+      const aba = planilha.Sheets[nomeAba];
+
+      if (!aba || !aba["!ref"]) return;
+
+      // Limita a área lida (planilhas com formatação na coluna inteira
+      // podem declarar milhões de linhas vazias).
+      const intervalo = XLSX.utils.decode_range(aba["!ref"]);
+      const linhasNaAba = intervalo.e.r - intervalo.s.r + 1;
+      intervalo.e.r = Math.min(intervalo.e.r, intervalo.s.r + LIMITE_LINHAS_PLANILHA - 1);
+      intervalo.e.c = Math.min(intervalo.e.c, intervalo.s.c + 59);
+
+      const matriz = XLSX.utils.sheet_to_json(aba, {
+        header: 1,
+        raw: true,
+        defval: "",
+        blankrows: true,
+        range: XLSX.utils.encode_range(intervalo),
+      });
+
+      const analise = analisarMatrizPlanilha(matriz);
+
+      if (analise && analise.itens.length > 0) {
+        analise.nomeAba = nomeAba;
+        analise.linhaInicial = intervalo.s.r;
+
+        // Avisa só quando a aba realmente continua com dados além do limite lido.
+        const ultimaLinhaLida = matriz[matriz.length - 1] || [];
+
+        analise.cortouDados =
+          linhasNaAba > LIMITE_LINHAS_PLANILHA &&
+          ultimaLinhaLida.some((celula) => String(celula ?? "").trim() !== "");
+        analises.push(analise);
+      }
+    });
+
+    if (analises.length === 0) {
+      alert(
+        "Não encontrei os dados de carga nessa planilha.\n\n" +
+          "Em alguma linha da aba precisam existir os títulos Comprimento, Largura e Altura " +
+          "(ou uma coluna Dimensões no formato 120x80x100 = C x L x A) " +
+          "e, de preferência, Caixa/Base/Palet, Quantidade e Peso.\n\n" +
+          "Os nomes podem variar (ex.: Comp., Larg., Alt., Qtd., Peso Unit.) " +
+          "e a tabela pode estar em qualquer posição da aba.",
+      );
+      return;
+    }
+
+    let escolhidas = analises;
+
+    if (analises.length > 1) {
+      const lista = analises
+        .map((a, i) => `${i + 1} - ${a.nomeAba} (${a.itens.length} itens)`)
+        .join("\n");
+
+      const resposta = prompt(
+        `Foram encontradas ${analises.length} abas com dados de carga:\n\n${lista}\n\n` +
+          "Digite o número da aba que deseja importar (ou T para importar todas):",
+        "1",
+      );
+
+      if (resposta === null) return;
+
+      if (resposta.trim().toLowerCase() !== "t") {
+        const numero = parseInt(resposta, 10);
+
+        if (!(numero >= 1 && numero <= analises.length)) {
+          alert("Opção inválida. Importação cancelada.");
+          return;
+        }
+
+        escolhidas = [analises[numero - 1]];
+      }
+    }
+
+    let tratarComoMetros = false;
+
+    if (escolhidas.some((a) => a.possivelMetros)) {
+      tratarComoMetros = confirm(
+        "As medidas da planilha não informam a unidade e todos os valores são pequenos (parecem estar em METROS).\n\n" +
+          "OK = tratar como METROS (converte para cm)\n" +
+          "Cancelar = tratar como CENTÍMETROS",
+      );
+    }
+
+    const itensFinais = [];
+    const avisos = [];
+
+    escolhidas.forEach((analise) => {
+      const prefixo = escolhidas.length > 1 ? `[${analise.nomeAba}] ` : "";
+      const padrao = analise.possivelMetros && tratarComoMetros ? 100 : 1;
+      const fator = (campo) => analise.fatores[campo] ?? padrao;
+      const fatoresMedidas = [fator("comp"), fator("larg"), fator("alt")];
+
+      analise.avisos.forEach((aviso) => avisos.push(prefixo + aviso));
+
+      if (fatoresMedidas.some((f) => f !== 1)) {
+        const rotulo =
+          fatoresMedidas.every((f) => f === 100)
+            ? "metros"
+            : fatoresMedidas.every((f) => f === 0.1)
+              ? "milímetros"
+              : "outra unidade";
+
+        avisos.push(`${prefixo}medidas convertidas de ${rotulo} para cm`);
+      }
+
+      if (analise.cortouDados) {
+        avisos.push(
+          `${prefixo}a aba tem mais de ${LIMITE_LINHAS_PLANILHA} linhas; foram lidas só as primeiras ${LIMITE_LINHAS_PLANILHA}`,
+        );
+      }
+
+      if (analise.ignoradas.length > 0) {
+        const linhasExcel = analise.ignoradas
+          .map((r) => analise.linhaInicial + r + 1)
+          .slice(0, 10)
+          .join(", ");
+
+        avisos.push(
+          `${prefixo}${analise.ignoradas.length} linha(s) sem medidas ou com quantidade zero foram ignoradas (linha(s) ${linhasExcel}${analise.ignoradas.length > 10 ? "..." : ""})`,
+        );
+      }
+
+      analise.itens.forEach((item) => {
+        itensFinais.push({
+          nome: item.nome,
+          qtd: String(item.qtd),
+          comp: numeroParaCampoPlanilha(item.comp * fator("comp")),
+          larg: numeroParaCampoPlanilha(item.larg * fator("larg")),
+          alt: numeroParaCampoPlanilha(item.alt * fator("alt")),
+          peso: numeroParaCampoPlanilha(item.peso),
+        });
+      });
+    });
+
+    if (tabelaTemDadosPreenchidos()) {
+      const substituir = confirm(
+        `Importar ${itensFinais.length} item(ns) da planilha?\n\n` +
+          "A tabela atual já tem dados e eles serão SUBSTITUÍDOS.",
+      );
+
+      if (!substituir) return;
+    }
+
+    const tbody = document.querySelector("#tabela-carga tbody");
+    tbody.innerHTML = "";
+
+    itensFinais.forEach((item) => {
+      adicionarLinha(false, false);
+
+      const linha = tbody.querySelector("tr:last-child");
+
+      linha.querySelector(".nome").value = item.nome.slice(0, 200);
+      linha.querySelector(".qtd").value = item.qtd;
+      linha.querySelector(".comp").value = item.comp;
+      linha.querySelector(".larg").value = item.larg;
+      linha.querySelector(".alt").value = item.alt;
+      linha.querySelector(".peso").value = item.peso;
+    });
+
+    atualizarLabelsEcores();
+    salvarCarga();
+    verificarItensIncompletos();
+
+    if (avisos.length > 0) {
+      alert(
+        `Importação concluída: ${itensFinais.length} item(ns).\n\nAtenção:\n- ` +
+          avisos.join("\n- "),
+      );
+    }
+  };
+
+  leitor.readAsArrayBuffer(arquivo);
+}
+
+// =====================================================
+// PLANO DE CARREGAMENTO (PDF A4 paisagem)
+//
+// Relatório novo, separado do PDF atual: uma página de resumo e uma página
+// por veículo (vista superior, vista lateral e tabela de posições).
+// Usa só dados que o DCPRO já calcula; a liberação segue exatamente as mesmas
+// regras do PDF atual (a própria guarda dele é reaproveitada).
+// =====================================================
+
+const PLANO_AZUL = [11, 58, 92];
+const PLANO_VERDE_AZULADO = [14, 116, 144];
+const PLANO_FUNDO = [226, 232, 240];
+const PLANO_TEXTO = [30, 41, 59];
+const PLANO_SUAVE = [100, 116, 139];
+const PLANO_MARGEM = 12;
+const PLANO_LARGURA = 297;
+const PLANO_ALTURA = 210;
+
+function planoHexParaRgb(hex) {
+  const limpo = String(hex || "").replace("#", "");
+
+  if (!/^[0-9a-fA-F]{6}$/.test(limpo)) {
+    return [100, 116, 139];
+  }
+
+  return [
+    parseInt(limpo.slice(0, 2), 16),
+    parseInt(limpo.slice(2, 4), 16),
+    parseInt(limpo.slice(4, 6), 16),
+  ];
+}
+
+function planoClarear(rgb, fator) {
+  return rgb.map((v) => Math.round(v + (255 - v) * fator));
+}
+
+function planoLimparTexto(valor) {
+  return String(valor ?? "").replace(/[^\u0020-\u007E\u00A0-\u00FF]/g, "?");
+}
+
+function planoNumero(valor, casas = 0) {
+  return Number(valor || 0).toLocaleString("pt-BR", {
+    minimumFractionDigits: casas,
+    maximumFractionDigits: casas,
+  });
+}
+
+function planoCm(metros) {
+  return Math.round(Number(metros || 0) * 100);
+}
+
+function planoCortar(doc, texto, largura) {
+  let t = String(texto ?? "");
+
+  if (doc.getTextWidth(t) <= largura) {
+    return t;
+  }
+
+  while (t.length > 1 && doc.getTextWidth(t + "...") > largura) {
+    t = t.slice(0, -1);
+  }
+
+  return t + "...";
+}
+
+function planoAjustarFonte(doc, texto, largura, maximo, minimo) {
+  let tamanho = maximo;
+
+  doc.setFontSize(tamanho);
+
+  while (tamanho > minimo && doc.getTextWidth(texto) > largura) {
+    tamanho -= 0.5;
+    doc.setFontSize(tamanho);
+  }
+
+  return planoCortar(doc, texto, largura);
+}
+
+function planoLinhaTracejada(doc, x1, y1, x2, y2, traco = 1.6, vazio = 1.2) {
+  const comprimento = Math.hypot(x2 - x1, y2 - y1);
+
+  if (comprimento === 0) return;
+
+  const ux = (x2 - x1) / comprimento;
+  const uy = (y2 - y1) / comprimento;
+
+  for (let d = 0; d < comprimento; d += traco + vazio) {
+    const fim = Math.min(d + traco, comprimento);
+
+    doc.line(x1 + ux * d, y1 + uy * d, x1 + ux * fim, y1 + uy * fim);
+  }
+}
+
+function planoHtmlParaTexto(html) {
+  return String(html || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+// Mesma liberação do PDF atual: roda a guarda dele sem gerar arquivo.
+async function planoVerificarLiberacao() {
+  const alertaOriginal = window.alert;
+  const jspdfOriginal = window.jspdf;
+  const mensagens = [];
+
+  window.alert = (mensagem) => {
+    mensagens.push(String(mensagem));
+  };
+
+  window.jspdf = {
+    jsPDF: function () {
+      throw new Error("PLANO_LIBERADO");
+    },
+  };
+
+  try {
+    await gerarRelatorioPDF();
+  } catch (erro) {
+    // esperado: a guarda passou e o teste interrompeu a geração
+  } finally {
+    window.alert = alertaOriginal;
+    window.jspdf = jspdfOriginal;
+  }
+
+  const bloqueio = mensagens.find((m) => m.includes("não pode ser gerado"));
+
+  return bloqueio
+    ? { liberado: false, mensagem: bloqueio }
+    : { liberado: true, mensagem: "" };
+}
+
+function planoStatusDoVeiculo(numero) {
+  const manual = avaliacoesPersonalizadoPorViagem[numero];
+  const painel = document.getElementById(`painel-personalizado-${numero}`);
+  const manualAtivo =
+    manual && painel && painel.classList.contains("painel-aba-ativa");
+
+  if (manualAtivo) {
+    if (manual.nivel === "aprovado") {
+      return { texto: "Arranjo manual adequado", nivel: "ok" };
+    }
+
+    if (manual.nivel === "atencao") {
+      return { texto: "Arranjo manual em atenção", nivel: "atencao" };
+    }
+
+    return { texto: "Arranjo manual com ressalvas", nivel: "critico" };
+  }
+
+  const e = (estadosCgPorVeiculo || [])[numero - 1];
+
+  if (!e) {
+    return { texto: "", nivel: "ok" };
+  }
+
+  if (
+    (e.ressalva && e.ressalva.nivel === "critico") ||
+    (e.lateral && e.lateral.nivel === "critico")
+  ) {
+    return { texto: "Centro de gravidade crítico", nivel: "critico" };
+  }
+
+  if (e.ressalva || e.lateral) {
+    return { texto: "Centro de gravidade em atenção", nivel: "atencao" };
+  }
+
+  if (e.longitudinal) {
+    return { texto: "Concentração longitudinal de peso", nivel: "atencao" };
+  }
+
+  return { texto: "Centro de gravidade adequado", nivel: "ok" };
+}
+
+function planoColetarDados() {
+  return (ultimaFrotaCalculada || []).map((carga, indice) => {
+    const numero = indice + 1;
+    const ve = { ...carga.veiculo, nome: planoLimparTexto(carga.veiculo.nome) };
+
+    const caixas = (caixasPersonalizadasPorViagem[String(numero)] || [])
+      .filter((c) => c.zona === "veiculo")
+      .slice()
+      .sort((a, b) => a.X_Fisico - b.X_Fisico || a.Y_Fisico - b.Y_Fisico);
+
+    const pilhas = caixas.map((c, k) => {
+      const unidades = (
+        c.unidades && c.unidades.length
+          ? c.unidades
+          : [{ nome: c.nome, alt: c.alturaTotal, peso: c.pesoBloco, cor: c.cor }]
+      ).map((u) => ({
+        nome: planoLimparTexto(u.nome),
+        alt: Number(u.alt) || 0,
+        peso: Number(u.peso) || 0,
+        cor: u.cor || c.cor,
+      }));
+
+      const base = unidades[0];
+      const inversao = unidades.slice(1).some((u) => u.peso > base.peso + 0.001);
+
+      return {
+        pos: k + 1,
+        x: c.X_Fisico,
+        y: c.Y_Fisico,
+        comp: c.compRender,
+        larg: c.largRender,
+        compInformado: c.comp,
+        largInformado: c.larg,
+        girada: Math.abs(c.compRender - c.comp) > 0.01 && Math.abs(c.comp - c.larg) > 0.01,
+        peso: Number(c.pesoBloco) || unidades.reduce((t, u) => t + u.peso, 0),
+        altura: Number(c.alturaTotal) || unidades.reduce((t, u) => t + u.alt, 0),
+        unidades,
+        inversao,
+        cor: c.cor,
+      };
+    });
+
+    const pesoTotalPilhas = pilhas.reduce((t, p) => t + p.peso, 0) || 1;
+    const cgX = pilhas.reduce((t, p) => t + p.peso * (p.x + p.comp / 2), 0) / pesoTotalPilhas;
+    const cgY = pilhas.reduce((t, p) => t + p.peso * (p.y + p.larg / 2), 0) / pesoTotalPilhas;
+
+    const itensPorNome = new Map();
+
+    carga.itens.forEach((item) => {
+      const nome = planoLimparTexto(item.nome);
+
+      itensPorNome.set(nome, (itensPorNome.get(nome) || 0) + (Number(item.qtd) || 1));
+    });
+
+    return {
+      numero,
+      veiculo: ve,
+      peso: carga.pesoAtual,
+      volume: carga.volumeAtual,
+      volumes: Array.from(itensPorNome.values()).reduce((t, q) => t + q, 0),
+      itensTexto: Array.from(itensPorNome.entries()).map(([n, q]) => `${n} (${q})`).join(" · "),
+      pilhas,
+      piso: pilhas.reduce((m, p) => Math.max(m, p.x + p.comp), 0),
+      alturaMaxima: pilhas.reduce((m, p) => Math.max(m, p.altura), 0),
+      cgX,
+      cgY,
+      status: planoStatusDoVeiculo(numero),
+    };
+  });
+}
+
+function planoCabecalhoPagina(doc, titulo, subtitulo) {
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(20);
+  doc.setTextColor(...PLANO_AZUL);
+  doc.text(titulo, PLANO_MARGEM, 17);
+
+  if (subtitulo) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.setTextColor(...PLANO_TEXTO);
+    doc.text(subtitulo, PLANO_MARGEM, 24);
+  }
+}
+
+function planoCaixaKpi(doc, x, y, largura, altura, rotulo, valor, destaque) {
+  doc.setFillColor(...(destaque ? PLANO_AZUL : PLANO_FUNDO));
+  doc.rect(x, y, largura, altura, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.5);
+  doc.setTextColor(...(destaque ? [190, 215, 235] : PLANO_SUAVE));
+  doc.text(rotulo.toUpperCase(), x + 3, y + 4.6);
+
+  doc.setTextColor(...(destaque ? [255, 255, 255] : PLANO_TEXTO));
+  doc.text(planoAjustarFonte(doc, valor, largura - 6, destaque ? 14 : 13, 7.5), x + 3, y + altura - 3.6);
+}
+
+function planoCorDoNivel(nivel) {
+  if (nivel === "critico") return [185, 28, 28];
+  if (nivel === "atencao") return [180, 83, 9];
+
+  return [21, 128, 61];
+}
+
+function planoPaginaResumo(doc, dados, contexto) {
+  const larguraUtil = PLANO_LARGURA - PLANO_MARGEM * 2;
+  const totalVolumes = dados.reduce((t, v) => t + v.volumes, 0);
+  const pesoTotal = dados.reduce((t, v) => t + v.peso, 0);
+  const volumeTotal = dados.reduce((t, v) => t + v.volume, 0);
+
+  planoCabecalhoPagina(
+    doc,
+    "Plano de carregamento",
+    `${dados.length} veículo(s) · ${totalVolumes} volume(s)`,
+  );
+
+  // identificação, à direita
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.5);
+  doc.setTextColor(...PLANO_SUAVE);
+  doc.text("SIMULAÇÃO", PLANO_LARGURA - PLANO_MARGEM, 10, { align: "right" });
+  doc.text("EMISSÃO", PLANO_LARGURA - PLANO_MARGEM, 19, { align: "right" });
+
+  doc.setFontSize(9.5);
+  doc.setTextColor(...PLANO_TEXTO);
+  doc.text(contexto.codigo, PLANO_LARGURA - PLANO_MARGEM, 14.5, { align: "right" });
+  doc.text(contexto.dataTexto, PLANO_LARGURA - PLANO_MARGEM, 23.5, { align: "right" });
+
+  // status geral
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...planoCorDoNivel(contexto.statusNivel));
+  doc.text(`STATUS: ${planoCortar(doc, contexto.statusTexto, larguraUtil - 20)}`, PLANO_MARGEM, 31);
+
+  // KPIs
+  let y = 36;
+  const gap = 4;
+  const larguraKpi = (larguraUtil - gap * 3) / 4;
+  const nomesVeiculos = {};
+
+  dados.forEach((v) => {
+    nomesVeiculos[v.veiculo.nome] = (nomesVeiculos[v.veiculo.nome] || 0) + 1;
+  });
+
+  const veiculosTexto = Object.entries(nomesVeiculos)
+    .map(([n, q]) => (q > 1 ? `${q} x ${n}` : n))
+    .join(", ");
+
+  planoCaixaKpi(doc, PLANO_MARGEM, y, larguraKpi, 17, "Peso bruto total", `${planoNumero(pesoTotal)} kg`, true);
+  planoCaixaKpi(doc, PLANO_MARGEM + (larguraKpi + gap), y, larguraKpi, 17, "Cubagem total", `${planoNumero(volumeTotal, 2)} m³`, false);
+  planoCaixaKpi(doc, PLANO_MARGEM + (larguraKpi + gap) * 2, y, larguraKpi, 17, "Volumes", String(totalVolumes), false);
+  planoCaixaKpi(doc, PLANO_MARGEM + (larguraKpi + gap) * 3, y, larguraKpi, 17, "Veículos", veiculosTexto, false);
+
+  y += 17 + 7;
+
+  // cartões por veículo (3 por linha)
+  const porLinha = 3;
+  const larguraCartao = (larguraUtil - gap * (porLinha - 1)) / porLinha;
+  const alturaCartao = 50;
+
+  dados.forEach((v, i) => {
+    const coluna = i % porLinha;
+
+    if (coluna === 0 && i > 0) {
+      y += alturaCartao + 5;
+    }
+
+    if (y + alturaCartao > PLANO_ALTURA - 16) {
+      doc.addPage();
+      planoCabecalhoPagina(doc, "Plano de carregamento", "Resumo por veículo (continuação)");
+      y = 30;
+    }
+
+    const x = PLANO_MARGEM + coluna * (larguraCartao + gap);
+
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.3);
+    doc.rect(x, y, larguraCartao, alturaCartao, "S");
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...PLANO_TEXTO);
+    doc.text(planoAjustarFonte(doc, `Veículo ${v.numero} · ${v.veiculo.nome}`, larguraCartao - 28, 11, 7.5), x + 4, y + 7);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...PLANO_SUAVE);
+    doc.text(`${v.volumes} volume(s)`, x + larguraCartao - 4, y + 7, { align: "right" });
+
+    const rotulos = [
+      ["PESO", `${planoNumero(v.peso)} kg`],
+      ["CUBAGEM", `${planoNumero(v.volume, 2)} m³`],
+      ["ASSOALHO", `${planoNumero(v.piso, 2)} m`],
+    ];
+
+    rotulos.forEach(([rotulo, valor], k) => {
+      const cx = x + 4 + k * ((larguraCartao - 8) / 3);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(...PLANO_SUAVE);
+      doc.text(rotulo, cx, y + 14.5);
+
+      doc.setFontSize(10.5);
+      doc.setTextColor(...PLANO_TEXTO);
+      doc.text(planoCortar(doc, valor, (larguraCartao - 8) / 3 - 2), cx, y + 20);
+    });
+
+    // barra de ocupação do peso
+    const pct = v.veiculo.pesoMax > 0 ? (v.peso / v.veiculo.pesoMax) * 100 : 0;
+    const larguraBarra = larguraCartao - 8;
+
+    doc.setFillColor(...PLANO_FUNDO);
+    doc.rect(x + 4, y + 24, larguraBarra, 3, "F");
+
+    doc.setFillColor(...(pct >= 95 ? [185, 28, 28] : pct >= 80 ? [217, 119, 6] : PLANO_VERDE_AZULADO));
+    doc.rect(x + 4, y + 24, larguraBarra * Math.min(pct, 100) / 100, 3, "F");
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...PLANO_SUAVE);
+    doc.text(`${Math.round(pct)}% da capacidade de peso (${planoNumero(v.veiculo.pesoMax)} kg)`, x + 4, y + 31);
+
+    // status do veículo
+    if (v.status.texto) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setTextColor(...planoCorDoNivel(v.status.nivel));
+      doc.text(planoCortar(doc, v.status.texto, larguraCartao - 8), x + 4, y + 36.5);
+    }
+
+    // itens
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(...PLANO_TEXTO);
+    doc.text("Itens:", x + 4, y + 42);
+
+    doc.setFont("helvetica", "normal");
+    const linhas = doc.splitTextToSize(v.itensTexto, larguraCartao - 18).slice(0, 2);
+
+    if (doc.splitTextToSize(v.itensTexto, larguraCartao - 18).length > 2) {
+      linhas[1] = planoCortar(doc, linhas[1], larguraCartao - 26) ;
+    }
+
+    doc.text(linhas, x + 14, y + 42, { lineHeightFactor: 1.2 });
+  });
+
+  y += alturaCartao + 8;
+
+  // premissas
+  const premissas = [];
+  const veiculosDistintos = new Map();
+
+  dados.forEach((v) => {
+    veiculosDistintos.set(
+      v.veiculo.nome,
+      `${v.veiculo.nome}: interior ${planoNumero(v.veiculo.compFisico, 2)} x ${planoNumero(v.veiculo.largFisica, 2)} x ${planoNumero(v.veiculo.altFisica, 2)} m, capacidade ${planoNumero(v.veiculo.pesoMax)} kg`,
+    );
+  });
+
+  premissas.push("Veículos: " + Array.from(veiculosDistintos.values()).join("; ") + ".");
+  premissas.push(
+    "Empilhamento: somente volumes com a mesma base (comprimento x largura); até 3 níveis quando todos têm até 0,80 m de altura, e até 2 níveis acima disso, sempre limitado pela altura interna do veículo.",
+  );
+  premissas.push(
+    "Orientação: o DCPRO não gira volumes automaticamente. Comprimento e largura são mantidos como informados; o giro só existe no modo Personalizado, feito pelo usuário.",
+  );
+
+  const manuais = dados.filter((v) => /manual/i.test(v.status.texto)).map((v) => v.numero);
+
+  if (manuais.length > 0) {
+    premissas.push(`Veículo(s) ${manuais.join(", ")} com arranjo manual definido na aba Personalizado.`);
+  }
+
+  if (contexto.alertaAET) {
+    premissas.push("Alerta operacional (possível necessidade de AET): " + contexto.alertaAET);
+  }
+
+  premissas.push(
+    "Projeção matemática de apoio operacional. Confirmar carga útil, peso por eixo, amarração e legislação vigente com a transportadora antes do carregamento.",
+  );
+
+  const alturaPremissas = 8 + premissas.reduce((t, p) => t + doc.splitTextToSize(p, larguraUtil - 4).length * 3.6 + 1.2, 0);
+
+  if (y + alturaPremissas > PLANO_ALTURA - 14) {
+    doc.addPage();
+    planoCabecalhoPagina(doc, "Plano de carregamento", "Premissas");
+    y = 30;
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(...PLANO_AZUL);
+  doc.text("PREMISSAS", PLANO_MARGEM, y);
+  y += 5;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...PLANO_TEXTO);
+
+  premissas.forEach((texto) => {
+    const linhas = doc.splitTextToSize(texto, larguraUtil - 4);
+
+    doc.text(linhas, PLANO_MARGEM + 2, y);
+    y += linhas.length * 3.6 + 1.2;
+  });
+}
+
+function planoVistaSuperior(doc, v, y0, escala) {
+  const ve = v.veiculo;
+  const x0 = PLANO_MARGEM + 3;
+  const larguraVeiculo = ve.compFisico * escala;
+  const alturaVeiculo = ve.largFisica * escala;
+  const xTraseira = x0 + larguraVeiculo;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(...PLANO_AZUL);
+  doc.text("VISTA SUPERIOR", PLANO_MARGEM, y0);
+
+  doc.setFontSize(6.5);
+  doc.setTextColor(...PLANO_SUAVE);
+  doc.text("< FRENTE (CAVALO)", x0, y0 + 4.5);
+  doc.text("TRASEIRA >", xTraseira, y0 + 4.5, { align: "right" });
+  doc.text("LADO DIREITO", xTraseira, y0, { align: "right" });
+
+  const yVeiculo = y0 + 7;
+
+  // lado direito (em cima) / lado esquerdo (embaixo), como o veículo é visto de cima com a frente à esquerda
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.5);
+  doc.setTextColor(...PLANO_SUAVE);
+  doc.text("LADO ESQUERDO (MOTORISTA)", xTraseira, yVeiculo + alturaVeiculo + 4, { align: "right" });
+
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(...PLANO_AZUL);
+  doc.setLineWidth(0.5);
+  doc.rect(x0, yVeiculo, larguraVeiculo, alturaVeiculo, "FD");
+
+  v.pilhas.forEach((p) => {
+    const px = x0 + p.x * escala;
+    const py = yVeiculo + p.y * escala;
+    const pl = p.comp * escala;
+    const pa = p.larg * escala;
+    const cor = planoHexParaRgb(p.unidades[0].cor || p.cor);
+
+    doc.setFillColor(...cor);
+    doc.setDrawColor(255, 255, 255);
+    doc.setLineWidth(0.25);
+    doc.rect(px, py, pl, pa, "FD");
+
+    if (pl >= 6 && pa >= 5) {
+      doc.setFillColor(255, 255, 255);
+      doc.rect(px + 0.8, py + 0.8, Math.min(7.5, pl - 1.6), 3.4, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(5.5);
+      doc.setTextColor(...PLANO_AZUL);
+      doc.text(`P${p.pos}`, px + 1.4, py + 3.3);
+    }
+
+    if (pl >= 15 && pa >= 12) {
+      const maxLargura = pl - 3;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(Math.min(8, Math.max(5.5, pl / 7)));
+      doc.setTextColor(255, 255, 255);
+      doc.text(planoCortar(doc, p.unidades[0].nome, maxLargura), px + 1.6, py + pa / 2 - 0.5);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(5.5);
+
+      if (p.unidades.length > 1 && pa >= 18) {
+        const acima = "+ " + p.unidades.slice(1).map((u) => u.nome).join(" + ") + " em cima";
+
+        doc.text(planoCortar(doc, acima, maxLargura), px + 1.6, py + pa / 2 + 2.6);
+      }
+
+      doc.text(`${planoNumero(p.peso)} kg`, px + 1.6, py + pa - 1.8);
+    }
+  });
+
+  // centro do veículo e CG da carga
+  const cx = x0 + (ve.compFisico / 2) * escala;
+  const cy = yVeiculo + (ve.largFisica / 2) * escala;
+
+  doc.setDrawColor(37, 99, 235);
+  doc.setFillColor(255, 255, 255);
+  doc.setLineWidth(0.5);
+  doc.circle(cx, cy, 1.2, "FD");
+
+  doc.setDrawColor(220, 38, 38);
+  doc.setFillColor(220, 38, 38);
+  doc.circle(x0 + v.cgX * escala, yVeiculo + v.cgY * escala, 1.2, "F");
+
+  // régua
+  const yRegua = yVeiculo + alturaVeiculo + 7.5;
+  const passo = ve.compFisico <= 6 ? 0.5 : ve.compFisico <= 16 ? 1 : 2;
+
+  doc.setDrawColor(...PLANO_SUAVE);
+  doc.setLineWidth(0.2);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6);
+  doc.setTextColor(...PLANO_SUAVE);
+
+  for (let m = 0; m <= ve.compFisico + 0.001; m += passo) {
+    const xm = x0 + m * escala;
+
+    doc.line(xm, yRegua - 1.4, xm, yRegua);
+    doc.text(`${planoNumero(m, passo < 1 ? 1 : 0)} m`, xm + 0.8, yRegua + 2);
+  }
+
+  // legenda do CG
+  const yLegenda = yRegua + 6.5;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.5);
+  doc.setTextColor(...PLANO_TEXTO);
+  doc.setDrawColor(37, 99, 235);
+  doc.setFillColor(255, 255, 255);
+  doc.circle(x0 + 1.5, yLegenda - 0.8, 1, "FD");
+  doc.text(`Centro do veículo (X ${planoNumero(ve.compFisico / 2, 2)} m | Y ${planoNumero(ve.largFisica / 2, 2)} m)`, x0 + 4, yLegenda);
+
+  doc.setFillColor(220, 38, 38);
+  doc.circle(x0 + 88, yLegenda - 0.8, 1, "F");
+  doc.text(`CG da carga (X ${planoNumero(v.cgX, 2)} m | Y ${planoNumero(v.cgY, 2)} m)`, x0 + 90.5, yLegenda);
+
+  return yLegenda + 4;
+}
+
+function planoVistaLateral(doc, v, y0, escala, alturaMaximaMm) {
+  const ve = v.veiculo;
+  const x0 = PLANO_MARGEM + 3;
+  const alturaRef = Math.max(ve.altFisica, v.alturaMaxima, 0.5);
+  const escalaV = Math.min(escala, alturaMaximaMm / alturaRef);
+  const larguraVeiculo = ve.compFisico * escala;
+  const yTitulo = y0;
+  const yBase = y0 + 4 + alturaRef * escalaV;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(...PLANO_AZUL);
+  doc.text("VISTA LATERAL · LADO DO MOTORISTA", PLANO_MARGEM, yTitulo);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6);
+  doc.setTextColor(...PLANO_SUAVE);
+  doc.text("Volumes do lado oposto aparecem esmaecidos atrás", x0 + larguraVeiculo, yTitulo, { align: "right" });
+
+  // linha de altura interna e marcas de 1 m
+  const yTeto = yBase - ve.altFisica * escalaV;
+
+  doc.setDrawColor(...PLANO_SUAVE);
+  doc.setLineWidth(0.2);
+  planoLinhaTracejada(doc, x0, yTeto, x0 + larguraVeiculo, yTeto);
+  doc.text(`altura interna ${planoNumero(ve.altFisica, 2)} m`, x0 + larguraVeiculo, yTeto - 1, { align: "right" });
+
+  for (let m = 1; m < alturaRef + 0.001; m += 1) {
+    const ym = yBase - m * escalaV;
+
+    doc.setDrawColor(226, 232, 240);
+    planoLinhaTracejada(doc, x0, ym, x0 + larguraVeiculo, ym, 0.8, 1.6);
+    doc.setFontSize(6);
+    doc.setTextColor(...PLANO_SUAVE);
+    doc.text(`${m},0 m`, x0 - 1, ym + 0.8, { align: "right" });
+  }
+
+  doc.setDrawColor(...PLANO_AZUL);
+  doc.setLineWidth(0.6);
+  doc.line(x0, yBase, x0 + larguraVeiculo, yBase);
+
+  const metadeLargura = ve.largFisica / 2;
+  const ordenadas = v.pilhas
+    .slice()
+    .sort((a, b) => a.y + a.larg / 2 - (b.y + b.larg / 2));
+
+  // lado direito (Y pequeno) fica atrás e esmaecido; lado do motorista (Y grande) fica na frente
+  ordenadas.forEach((p) => {
+    const ladoMotorista = p.y + p.larg / 2 >= metadeLargura;
+    const px = x0 + p.x * escala;
+    const pl = p.comp * escala;
+    let yTopo = yBase;
+
+    p.unidades.forEach((u, k) => {
+      const altura = u.alt * escalaV;
+      const cor = planoHexParaRgb(u.cor || p.cor);
+
+      yTopo -= altura;
+      doc.setFillColor(...(ladoMotorista ? cor : planoClarear(cor, 0.65)));
+      doc.setDrawColor(255, 255, 255);
+      doc.setLineWidth(0.25);
+      doc.rect(px, yTopo, pl, altura, "FD");
+
+      if (ladoMotorista && pl >= 9 && altura >= 5) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(Math.min(7, Math.max(5, pl / 8)));
+        doc.setTextColor(255, 255, 255);
+        doc.text(planoCortar(doc, k === 0 ? `P${p.pos} ${u.nome}` : u.nome, pl - 2), px + pl / 2, yTopo + altura / 2 + 1, { align: "center" });
+      }
+    });
+  });
+
+  return yBase + 5;
+}
+
+function planoTabelaPosicoes(doc, v, yInicial, rotuloPagina) {
+  const colunas = [11, 46, 34, 22, 56, 34, 22, 28, 20];
+  const titulos = ["POS.", "BASE", "C × L × A (cm)", "PESO", "EM CIMA", "C × L × A (cm)", "PESO", "PESO DA POSIÇÃO", "ALTURA"];
+  const x0 = PLANO_MARGEM;
+  const larguraTotal = colunas.reduce((t, c) => t + c, 0);
+  let y = yInicial;
+  let temInversao = false;
+
+  const cabecalho = () => {
+    doc.setFillColor(...PLANO_AZUL);
+    doc.rect(x0, y, larguraTotal, 6.5, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(255, 255, 255);
+
+    let x = x0;
+
+    colunas.forEach((largura, i) => {
+      doc.text(titulos[i], x + 2, y + 4.3);
+      x += largura;
+    });
+
+    y += 6.5;
+  };
+
+  cabecalho();
+
+  v.pilhas.forEach((p, indice) => {
+    const base = p.unidades[0];
+    const acima = p.unidades.slice(1);
+    const linhas = Math.max(1, acima.length);
+    const alturaLinha = 5.4 + (linhas - 1) * 3.8;
+
+    if (y + alturaLinha > PLANO_ALTURA - 14) {
+      doc.addPage();
+      planoCabecalhoPagina(doc, "Layout de carregamento", `${rotuloPagina} · posições (continuação)`);
+      y = 30;
+      cabecalho();
+    }
+
+    if (indice % 2 === 1) {
+      doc.setFillColor(241, 245, 249);
+      doc.rect(x0, y, larguraTotal, alturaLinha, "F");
+    }
+
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.15);
+    doc.line(x0, y + alturaLinha, x0 + larguraTotal, y + alturaLinha);
+
+    const dim = (u) => `${planoCm(p.compInformado)} × ${planoCm(p.largInformado)} × ${planoCm(u.alt)}`;
+    const celulas = (x) => {
+      let cx = x;
+      const posicoes = [];
+
+      colunas.forEach((largura) => {
+        posicoes.push(cx);
+        cx += largura;
+      });
+
+      return posicoes;
+    };
+    const cx = celulas(x0);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...PLANO_TEXTO);
+    doc.text(`${p.pos}${p.inversao ? "*" : ""}`, cx[0] + 2, y + 3.8);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+
+    const cor = planoHexParaRgb(base.cor || p.cor);
+
+    doc.setFillColor(...cor);
+    doc.rect(cx[1] + 1.2, y + 1.6, 2.2, 2.2, "F");
+    doc.text(planoCortar(doc, base.nome + (p.girada ? " (girada)" : ""), colunas[1] - 7), cx[1] + 5, y + 3.8);
+    doc.text(dim(base), cx[2] + 2, y + 3.8);
+    doc.text(`${planoNumero(base.peso)} kg`, cx[3] + 2, y + 3.8);
+
+    if (acima.length === 0) {
+      doc.setTextColor(...PLANO_SUAVE);
+      doc.text("-", cx[4] + 2, y + 3.8);
+    } else {
+      acima.forEach((u, k) => {
+        const yl = y + 3.8 + k * 3.8;
+
+        doc.setFillColor(...planoHexParaRgb(u.cor || p.cor));
+        doc.rect(cx[4] + 1.2, yl - 2.2, 2.2, 2.2, "F");
+        doc.setTextColor(...PLANO_TEXTO);
+        doc.text(planoCortar(doc, u.nome, colunas[4] - 7), cx[4] + 5, yl);
+        doc.text(dim(u), cx[5] + 2, yl);
+        doc.text(`${planoNumero(u.peso)} kg`, cx[6] + 2, yl);
+      });
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...PLANO_TEXTO);
+    doc.text(`${planoNumero(p.peso)} kg`, cx[7] + 2, y + 3.8);
+    doc.setFont("helvetica", "normal");
+    doc.text(`${planoNumero(p.altura, 2)} m`, cx[8] + 2, y + 3.8);
+
+    if (p.inversao) temInversao = true;
+
+    y += alturaLinha;
+  });
+
+  if (temInversao) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(180, 83, 9);
+    doc.text("* Posição com peça mais pesada sobre peça mais leve: avaliar a inversão da ordem do empilhamento.", x0, y + 4.5);
+  }
+}
+
+function planoPaginaVeiculo(doc, v, total) {
+  const ve = v.veiculo;
+  const larguraUtil = PLANO_LARGURA - PLANO_MARGEM * 2;
+  const rotulo = `Veículo ${v.numero} de ${total} · ${ve.nome}`;
+
+  doc.addPage();
+  planoCabecalhoPagina(doc, "Layout de carregamento", rotulo);
+
+  if (v.status.texto) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...planoCorDoNivel(v.status.nivel));
+    doc.text(v.status.texto, PLANO_LARGURA - PLANO_MARGEM, 24, { align: "right" });
+  }
+
+  const gap = 3;
+  const larguraKpi = (larguraUtil - gap * 4) / 5;
+  const yKpi = 28;
+  const kpis = [
+    ["Peso bruto", `${planoNumero(v.peso)} kg`, true],
+    ["Cubagem", `${planoNumero(v.volume, 2)} m³`, false],
+    ["Volumes", String(v.volumes), false],
+    ["Assoalho ocupado", `${planoNumero(v.piso, 2)} m`, false],
+    ["Pilha mais alta", `${planoNumero(v.alturaMaxima, 2)} m`, false],
+  ];
+
+  kpis.forEach(([r, valor, destaque], i) => {
+    planoCaixaKpi(doc, PLANO_MARGEM + i * (larguraKpi + gap), yKpi, larguraKpi, 14, r, valor, destaque);
+  });
+
+  const escala = Math.min((larguraUtil - 6) / ve.compFisico, 50 / ve.largFisica);
+  let y = planoVistaSuperior(doc, v, yKpi + 14 + 7, escala);
+
+  y = planoVistaLateral(doc, v, y + 3, escala, 30);
+
+  if (PLANO_ALTURA - 14 - y < 30) {
+    doc.addPage();
+    planoCabecalhoPagina(doc, "Layout de carregamento", `${rotulo} · posições`);
+    y = 30;
+  } else {
+    y += 3;
+  }
+
+  planoTabelaPosicoes(doc, v, y, rotulo);
+}
+
+async function gerarPlanoCarregamento() {
+  if (!ultimaFrotaCalculada || ultimaFrotaCalculada.length === 0) {
+    alert("Calcule a carga antes de gerar o plano de carregamento.");
+    return;
+  }
+
+  const liberacao = await planoVerificarLiberacao();
+
+  if (!liberacao.liberado) {
+    alert(liberacao.mensagem.replace("O PDF", "O plano de carregamento"));
+    return;
+  }
+
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert("A biblioteca de PDF não foi carregada. Verifique a conexão com a internet e recarregue a página.");
+    return;
+  }
+
+  const dados = planoColetarDados();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+  const agora = new Date();
+  const doisDigitos = (n) => String(n).padStart(2, "0");
+  const codigo = `DCPRO-${agora.getFullYear()}${doisDigitos(agora.getMonth() + 1)}${doisDigitos(agora.getDate())}-${doisDigitos(agora.getHours())}${doisDigitos(agora.getMinutes())}${doisDigitos(agora.getSeconds())}`;
+
+  const selo = document.getElementById("selo-compatibilidade");
+  const textoSelo = selo ? selo.textContent.replace(/\s+/g, " ").trim() : "";
+  const tituloSelo = selo
+    ? ((selo.querySelector("strong") || selo.querySelector("span") || selo).textContent || "").replace(/\s+/g, " ").trim()
+    : "";
+
+  let statusTexto = tituloSelo.slice(0, 100);
+  let statusNivel = selo && selo.className.includes("selo-cabe") ? "ok" : "atencao";
+
+  if (/CRÍTICA/.test(textoSelo)) {
+    statusTexto = "ARRANJO MANUAL CONSIDERADO (cálculo automático classificado como crítico)";
+    statusNivel = "atencao";
+  }
+
+  const alertaAET = alertaOperacionalAET
+    ? planoHtmlParaTexto(alertaOperacionalAET.mensagem).split("ANTES DE INICIAR")[0].replace(/\s+/g, " ").trim()
+    : "";
+
+  const contexto = {
+    codigo,
+    dataTexto: agora.toLocaleString("pt-BR"),
+    statusTexto,
+    statusNivel,
+    alertaAET,
+  };
+
+  planoPaginaResumo(doc, dados, contexto);
+  dados.forEach((v) => planoPaginaVeiculo(doc, v, dados.length));
+
+  const totalPaginas = doc.getNumberOfPages();
+
+  for (let i = 1; i <= totalPaginas; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.2);
+    doc.line(PLANO_MARGEM, PLANO_ALTURA - 10, PLANO_LARGURA - PLANO_MARGEM, PLANO_ALTURA - 10);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...PLANO_SUAVE);
+    doc.text(`DCPRO V1.6 Beta · Plano de carregamento · ${codigo}`, PLANO_MARGEM, PLANO_ALTURA - 6);
+    doc.text(`Página ${i} de ${totalPaginas}`, PLANO_LARGURA - PLANO_MARGEM, PLANO_ALTURA - 6, { align: "right" });
+  }
+
+  doc.save(`Plano_Carregamento_${codigo}.pdf`);
+}
+
+// O botão do plano aparece e some junto com o botão do PDF atual.
+(function sincronizarBotaoPlano() {
+  const iniciar = () => {
+    const pdf = document.getElementById("btn-gerar-pdf");
+    const plano = document.getElementById("btn-plano-carregamento");
+
+    if (!pdf || !plano) return;
+
+    const copiar = () => {
+      plano.style.display = pdf.style.display;
+    };
+
+    new MutationObserver(copiar).observe(pdf, {
+      attributes: true,
+      attributeFilter: ["style"],
+    });
+
+    copiar();
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", iniciar);
+  } else {
+    iniciar();
+  }
+})();
+
+function toggleHistorico() {
+  const painel = document.getElementById("painel-historico");
+  if (!painel) return;
+
+  const abrindo = painel.style.display !== "block";
+  painel.style.display = abrindo ? "block" : "none";
+
+  if (abrindo) {
+    renderizarHistorico();
+  }
+}
+
+function renderizarHistorico() {
+  const lista = document.getElementById("lista-historico");
+  if (!lista) return;
+
+  const historico = lerHistorico();
+
+  if (historico.length === 0) {
+    lista.innerHTML =
+      "<p class='historico-vazio'>Nenhum cálculo salvo ainda.</p>";
+    return;
+  }
+
+  lista.innerHTML = historico
+    .map(
+      (entrada, indice) => `
+        <div class="historico-item">
+          <div class="historico-info">
+            <strong>${escaparHtml(entrada.data)}</strong>
+            <span>${entrada.itens.length} item(ns) • ${escaparHtml(entrada.veiculo)}</span>
+          </div>
+          <button class="btn-carregar-historico" onclick="carregarDoHistorico(${indice})" type="button">
+            Carregar
+          </button>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function carregarDoHistorico(indice) {
+  const historico = lerHistorico();
+
+  const entrada = historico[indice];
+  if (!entrada) return;
+
+  const tbody = document.querySelector("#tabela-carga tbody");
+  tbody.innerHTML = "";
+
+  const texto = (valor, maximo) =>
+    valor === null || valor === undefined || typeof valor === "object"
+      ? ""
+      : String(valor).slice(0, maximo);
+
+  entrada.itens.forEach((item) => {
+    adicionarLinha(false, false);
+
+    const linha = document.querySelector("#tabela-carga tbody tr:last-child");
+
+    linha.querySelector(".nome").value = texto(item.nome, 200);
+    linha.querySelector(".qtd").value = texto(item.qtd, 12) || "1";
+    linha.querySelector(".comp").value = texto(item.comp, 30);
+    linha.querySelector(".larg").value = texto(item.larg, 30);
+    linha.querySelector(".alt").value = texto(item.alt, 30);
+    linha.querySelector(".peso").value = texto(item.peso, 30);
+  });
+
+  atualizarLabelsEcores();
+
+  atualizarLabelsEcores();
+  salvarCarga();
+
+  document.getElementById("painel-historico").style.display = "none";
+}
+
+function verificarVeiculoPersonalizado() {
+  const select = document.getElementById("select-veiculo");
+  const bloco = document.getElementById("bloco-veiculo-personalizado");
+
+  if (!select || !bloco) return;
+
+  if (select.value === "personalizado") {
+    bloco.style.display = "block";
+  } else {
+    bloco.style.display = "none";
+  }
+}
+
+function salvarVeiculoPersonalizado() {
+  const dados = {
+    select: document.getElementById("select-veiculo").value,
+    nome: document.getElementById("vp-nome")?.value || "",
+    peso: document.getElementById("vp-peso")?.value || "",
+qtd: document.getElementById("vp-qtd")?.value || "1",
+comp: document.getElementById("vp-comp")?.value || "",
+    larg: document.getElementById("vp-larg")?.value || "",
+    alt: document.getElementById("vp-alt")?.value || "",
+  };
+
+  localStorage.setItem("dcpro_veiculo_personalizado", JSON.stringify(dados));
+}
+
+function carregarVeiculoPersonalizado() {
+  const dados = lerJsonSalvo("dcpro_veiculo_personalizado", {});
+
+  if (Object.keys(dados).length === 0) return;
+
+  const texto = (valor, maximo) =>
+    valor === null || valor === undefined || typeof valor === "object"
+      ? ""
+      : String(valor).slice(0, maximo);
+
+  // O seletor só aceita um veículo que existe (ou "personalizado").
+  const selecionado = texto(dados.select, 20);
+  const selecionadoValido =
+    selecionado === "personalizado" ||
+    (/^\d+$/.test(selecionado) && Number(selecionado) < dbVeiculos.length);
+
+  document.getElementById("select-veiculo").value = selecionadoValido
+    ? selecionado
+    : "4";
+  document.getElementById("vp-nome").value = texto(dados.nome, 60);
+  document.getElementById("vp-peso").value = texto(dados.peso, 30);
+  document.getElementById("vp-qtd").value = texto(dados.qtd, 12) || "1";
+  document.getElementById("vp-comp").value = texto(dados.comp, 30);
+  document.getElementById("vp-larg").value = texto(dados.larg, 30);
+  document.getElementById("vp-alt").value = texto(dados.alt, 30);
+
+  verificarVeiculoPersonalizado();
+}
+
+// =====================================================
+// INICIALIZAÇÃO DO SISTEMA
+// =====================================================
+
+window.onload = function () {
+  document.getElementById("btn-gerar-pdf").style.display = "none";
+  document.getElementById("btn-excel").style.display = "none";
+
+  carregarCargaSalva();
+  carregarVeiculoPersonalizado();
+
+  if (document.querySelectorAll("#tabela-carga tbody tr").length === 0) {
+    adicionarLinha();
+  }
+
+  document
+    .getElementById("select-veiculo")
+    .addEventListener("change", function () {
+      verificarVeiculoPersonalizado();
+      salvarVeiculoPersonalizado();
+    });
+
+  ["vp-nome", "vp-peso", "vp-comp", "vp-larg", "vp-alt"].forEach((id) => {
+    document
+      .getElementById(id)
+      ?.addEventListener("input", salvarVeiculoPersonalizado);
+  });
+
+  verificarVeiculoPersonalizado();
+};
